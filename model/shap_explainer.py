@@ -183,23 +183,42 @@ class CounterfactualExplainer:
         "crypto_external_wit_count",
     ]
 
-    def __init__(self, model, scaler, feature_names: List[str]):
+    def __init__(self, model, scaler, feature_names: List[str], gnn_proba=None):
         self.model         = model
         self.scaler        = scaler
         self.feature_names = feature_names
+        self.gnn_proba     = gnn_proba
 
     def generate(
         self,
         X_row: np.ndarray,
         target_score: float = 0.3,
         top_k: int = 5,
+        gnn_prob: float = None,
     ) -> List[Dict]:
         """
         返回最有效的 top_k 個可操作建議
         每個建議格式：{feature, from_value, to_value, score_change}
         """
-        X_scaled  = self.scaler.transform(X_row.reshape(1, -1))
-        base_prob = self.model.predict_proba(X_scaled)[0, 1]
+        # 檢查 model 是否為 ensemble（有 predict_proba 方法且需要原始特徵）
+        X_input = X_row.reshape(1, -1)
+
+        # 準備 GNN probability（如果有的話）
+        gnn_proba_array = np.array([gnn_prob]) if gnn_prob is not None else self.gnn_proba
+
+        if hasattr(self.model, 'predict_proba'):
+            # Ensemble 會自己處理縮放，傳入原始特徵和GNN概率
+            if hasattr(self.model, 'use_gnn') and self.model.use_gnn:
+                base_prob = self.model.predict_proba(X_input, gnn_proba=gnn_proba_array)[0]
+            else:
+                base_prob = self.model.predict_proba(X_input)[0]
+            if isinstance(base_prob, np.ndarray):
+                base_prob = base_prob if len(base_prob.shape) == 0 else base_prob
+            else:
+                base_prob = float(base_prob)
+        else:
+            X_scaled = self.scaler.transform(X_input)
+            base_prob = self.model.predict_proba(X_scaled)[0, 1]
 
         suggestions = []
         for feat in self.MUTABLE_FEATURES:
@@ -212,9 +231,21 @@ class CounterfactualExplainer:
             X_cf = X_row.copy()
             X_cf[fi] = 0.0   # 理想值（簡化）
 
-            X_cf_scaled = self.scaler.transform(X_cf.reshape(1, -1))
-            cf_prob = self.model.predict_proba(X_cf_scaled)[0, 1]
-            delta   = base_prob - cf_prob
+            X_cf_input = X_cf.reshape(1, -1)
+            if hasattr(self.model, 'predict_proba'):
+                if hasattr(self.model, 'use_gnn') and self.model.use_gnn:
+                    cf_prob = self.model.predict_proba(X_cf_input, gnn_proba=gnn_proba_array)[0]
+                else:
+                    cf_prob = self.model.predict_proba(X_cf_input)[0]
+                if isinstance(cf_prob, np.ndarray):
+                    cf_prob = cf_prob if len(cf_prob.shape) == 0 else cf_prob
+                else:
+                    cf_prob = float(cf_prob)
+            else:
+                X_cf_scaled = self.scaler.transform(X_cf_input)
+                cf_prob = self.model.predict_proba(X_cf_scaled)[0, 1]
+
+            delta = base_prob - cf_prob
 
             if delta > 0:
                 suggestions.append({

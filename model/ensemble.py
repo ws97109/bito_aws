@@ -42,8 +42,8 @@ def build_xgboost(scale_pos_weight: float = 50.0) -> xgb.XGBClassifier:
         scale_pos_weight=scale_pos_weight,
         use_label_encoder=False,
         eval_metric="aucpr",   # AUC-PR 更適合不平衡問題
-        tree_method="gpu_hist",
-        device="cuda",
+        tree_method="hist",    # 使用 CPU 版本的 hist 方法
+        device="cpu",
         random_state=42,
         early_stopping_rounds=50,
     )

@@ -38,8 +38,8 @@ def build_transaction_graph(
 
     external = crypto[crypto["sub_kind"] == 0].copy()
     wallets = pd.concat([
-        external["from_wallet"].dropna(),
-        external["to_wallet"].dropna(),
+        external["from_wallet_hash"].dropna(),
+        external["to_wallet_hash"].dropna(),
     ]).unique().tolist()
     wallet_to_idx = {w: i for i, w in enumerate(wallets)}
 
@@ -53,11 +53,11 @@ def build_transaction_graph(
     data["wallet"].num_nodes = len(wallets)
 
     # ── 邊：user → wallet（提領）──
-    withdrawals = external[external["kind"] == 1].dropna(subset=["to_wallet"])
+    withdrawals = external[external["kind"] == 1].dropna(subset=["to_wallet_hash"])
     src_u, dst_w = [], []
     for _, row in withdrawals.iterrows():
         uid = row["user_id"]
-        wid = row["to_wallet"]
+        wid = row["to_wallet_hash"]
         if uid in user_to_idx and wid in wallet_to_idx:
             src_u.append(user_to_idx[uid])
             dst_w.append(wallet_to_idx[wid])
@@ -67,11 +67,11 @@ def build_transaction_graph(
         )
 
     # ── 邊：wallet → user（加值）──
-    deposits = external[external["kind"] == 0].dropna(subset=["from_wallet"])
+    deposits = external[external["kind"] == 0].dropna(subset=["from_wallet_hash"])
     src_w2, dst_u2 = [], []
     for _, row in deposits.iterrows():
         uid = row["user_id"]
-        wid = row["from_wallet"]
+        wid = row["from_wallet_hash"]
         if uid in user_to_idx and wid in wallet_to_idx:
             src_w2.append(wallet_to_idx[wid])
             dst_u2.append(user_to_idx[uid])

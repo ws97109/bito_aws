@@ -3,8 +3,8 @@ Main Pipeline — 真實資料版
 訓練流程：特徵工程 → GNN → 集成 → 可解釋性
 
 使用方式：
-    python main.py                               # 預設讀 ../RawData/
-    python main.py --data_dir ../RawData         # 指定資料夾
+    python main.py                               # 預設讀 
+    python main.py --data_dir ../adjust_data/train         # 指定資料夾
     python main.py --output results              # 指定輸出目錄
     python main.py --skip_gnn                    # 跳過 GNN（資料量小時）
 """
@@ -40,33 +40,33 @@ print(f"使用設備：{DEVICE}")
 # ═══════════════════════════════════════════════
 
 TABLE_SPECS = {
-    "user_info": {
+    "user_info_train": {
         "required": ["user_id", "status"],
         "datetime": ["confirmed_at", "level1_finished_at",
                      "level2_finished_at", "birthday"],
         "int":      ["user_id", "status", "sex", "career",
                      "income_source", "user_source"],
     },
-    "twd_transfer": {
+    "twd_transfer_train": {
         "required": ["user_id", "kind", "ori_samount"],
         "datetime": ["created_at"],
         "int":      ["user_id", "kind"],
         "float":    ["ori_samount", "source_ip"],
     },
-    "crypto_transfer": {
+    "crypto_transfer_train": {
         "required": ["user_id", "kind", "sub_kind", "ori_samount", "twd_srate"],
         "datetime": ["created_at"],
         "int":      ["user_id", "kind", "sub_kind", "protocol"],
         "float":    ["ori_samount", "twd_srate", "source_ip", "relation_user_id"],
         "str":      ["from_wallet", "to_wallet", "currency"],
     },
-    "usdt_twd_trading": {
+    "usdt_twd_trading_train": {
         "required": ["user_id", "is_buy", "trade_samount", "twd_srate"],
         "datetime": ["updated_at"],
         "int":      ["user_id", "is_buy", "is_market", "source"],
         "float":    ["trade_samount", "twd_srate", "source_ip"],
     },
-    "usdt_swap": {
+    "usdt_swap_train": {
         "required": ["user_id", "kind", "twd_samount", "currency_samount"],
         "datetime": ["created_at"],
         "int":      ["user_id", "kind"],
@@ -140,7 +140,7 @@ def load_and_validate(data_dir: str) -> dict:
                 print(f"      {col:<32} {cnt:>7} ({cnt/len(df)*100:.1f}%)")
 
         # user_info 特殊：確認有黑名單
-        if name == "user_info":
+        if name == "user_info_train":
             vc      = df["status"].value_counts().sort_index()
             n_black = int((df["status"] == 1).sum())
             print(f"    status 分布  : {dict(vc)}")
@@ -151,7 +151,9 @@ def load_and_validate(data_dir: str) -> dict:
                     "請確認 status 欄位：0=正常，1=黑名單"
                 )
 
-        tables[name] = df
+        # 存儲時去掉 _train 後綴，方便後續使用
+        key = name.replace("_train", "")
+        tables[key] = df
 
     return tables
 
@@ -207,7 +209,7 @@ def train_gnn(
 # 主流程
 # ═══════════════════════════════════════════════
 
-def main(data_dir: str = "rawdata", output_dir: str = "output", skip_gnn: bool = False):
+def main(data_dir: str = "adjust_data/train", output_dir: str = "output", skip_gnn: bool = False):
     os.makedirs(output_dir, exist_ok=True)
 
     # ── Step 1：載入真實 CSV ─────────────────────
@@ -350,7 +352,7 @@ def main(data_dir: str = "rawdata", output_dir: str = "output", skip_gnn: bool =
     print("="*55)
 
     cf_explainer  = CounterfactualExplainer(
-        ensemble.meta_model, ensemble.scaler, feature_names
+        ensemble, ensemble.scaler, feature_names
     )
     n_report      = min(5, len(y_proba))
     high_risk_idx = np.argsort(y_proba)[-n_report:][::-1]
@@ -363,7 +365,9 @@ def main(data_dir: str = "rawdata", output_dir: str = "output", skip_gnn: bool =
         true_label = int(y_te[local_idx])
 
         shap_r = explainer.explain_user(local_idx, user_id=uid, risk_score=score)
-        cf_r   = cf_explainer.generate(X_te[local_idx])
+        # 傳入對應的 GNN 概率
+        gnn_prob_single = float(gnn_te[local_idx]) if gnn_te is not None else None
+        cf_r   = cf_explainer.generate(X_te[local_idx], gnn_prob=gnn_prob_single)
         report = generate_user_report(uid, score, shap_r, cf_r)
 
         tag    = "【實際黑名單】" if true_label == 1 else "【實際正常】"
@@ -427,8 +431,8 @@ def main(data_dir: str = "rawdata", output_dir: str = "output", skip_gnn: bool =
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="虛擬貨幣黑名單預測訓練")
     parser.add_argument(
-        "--data_dir", default="../RawData",
-        help="CSV 資料夾路徑（預設：../RawData/）",
+        "--data_dir", default="../adjust_data/train",
+        help="CSV 資料夾路徑（預設：../adjust_data/train）",
     )
     parser.add_argument(
         "--output", default="output",

@@ -26,7 +26,7 @@ def build_user_features(user_info: pd.DataFrame) -> pd.DataFrame:
     df["confirmed_at"]        = pd.to_datetime(df["confirmed_at"])
     df["level1_finished_at"]  = pd.to_datetime(df["level1_finished_at"])
     df["level2_finished_at"]  = pd.to_datetime(df["level2_finished_at"])
-    df["birthday"]            = pd.to_datetime(df["birthday"])
+    # 數據中已有 age 欄位，不需要從 birthday 計算
 
     # KYC 完成狀態
     df["has_kyc_level2"] = df["level2_finished_at"].notna().astype(int)
@@ -39,9 +39,11 @@ def build_user_features(user_info: pd.DataFrame) -> pd.DataFrame:
     # 帳號年齡（天）
     df["account_age_days"] = (now - df["confirmed_at"]).dt.days.clip(lower=0)
 
-    # 年齡
-    df["age"] = (now - df["birthday"]).dt.days / 365.25
-    df["age"] = df["age"].clip(lower=0, upper=120)
+    # 年齡 - 使用已有的 age 欄位並進行清理
+    if "age" in df.columns:
+        df["age"] = pd.to_numeric(df["age"], errors="coerce").clip(lower=0, upper=120)
+    else:
+        df["age"] = 0  # 如果沒有 age 欄位，設為 0
 
     # 高風險職業 / 收入來源
     df["is_high_risk_career"] = df["career"].isin(HIGH_RISK_CAREERS).astype(int)
@@ -101,7 +103,7 @@ def build_twd_features(twd: pd.DataFrame) -> pd.DataFrame:
     ).astype(int)
 
     # 提領是否有 IP（無 IP = 外部觸發，有 IP = 站內操作）
-    wit_ip = withdraw.groupby("user_id")["source_ip"].apply(
+    wit_ip = withdraw.groupby("user_id")["source_ip_hash"].apply(
         lambda x: x.notna().mean()
     ).rename("twd_wit_ip_ratio")
     feat = feat.join(wit_ip, how="left").fillna(0)
@@ -160,7 +162,7 @@ def build_crypto_features(crypto: pd.DataFrame) -> pd.DataFrame:
     )
 
     # 提領 IP 覆蓋率
-    wit_ip = withdraw.groupby("user_id")["source_ip"].apply(
+    wit_ip = withdraw.groupby("user_id")["source_ip_hash"].apply(
         lambda x: x.notna().mean()
     ).rename("crypto_wit_ip_ratio")
     feat = feat.join(wit_ip, how="left").fillna(0)
@@ -233,15 +235,15 @@ def build_ip_features(
 ) -> pd.DataFrame:
     frames = []
     for df, ts_col in [(twd, "created_at"), (crypto, "created_at"), (trading, "updated_at")]:
-        tmp = df[["user_id", "source_ip", ts_col]].copy()
+        tmp = df[["user_id", "source_ip_hash", ts_col]].copy()
         tmp["ts"] = pd.to_datetime(tmp[ts_col])
-        frames.append(tmp[["user_id", "source_ip", "ts"]])
+        frames.append(tmp[["user_id", "source_ip_hash", "ts"]])
 
-    all_ip = pd.concat(frames, ignore_index=True).dropna(subset=["source_ip"])
+    all_ip = pd.concat(frames, ignore_index=True).dropna(subset=["source_ip_hash"])
     all_ip["hour"] = all_ip["ts"].dt.hour
 
     # 每個 user 使用的唯一 IP 數
-    feat = all_ip.groupby("user_id")["source_ip"].agg(
+    feat = all_ip.groupby("user_id")["source_ip_hash"].agg(
         ip_unique_count="nunique",
         ip_total_count="count",
     )
@@ -256,10 +258,10 @@ def build_ip_features(
 
     # 同一 IP 被多少不同 user 使用（IP 共用風險）
     ip_user_count = (
-        all_ip.groupby("source_ip")["user_id"].nunique()
+        all_ip.groupby("source_ip_hash")["user_id"].nunique()
               .rename("ip_shared_user_count")
     )
-    all_ip = all_ip.join(ip_user_count, on="source_ip")
+    all_ip = all_ip.join(ip_user_count, on="source_ip_hash")
     feat["ip_max_shared"] = (
         all_ip.groupby("user_id")["ip_shared_user_count"].max()
               .reindex(feat.index, fill_value=1)
