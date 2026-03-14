@@ -3,7 +3,7 @@ Main Pipeline — 真實資料版
 訓練流程：特徵工程 → GNN → 集成 → 可解釋性
 
 使用方式：
-    python main.py                               # 預設讀 ../RawData/
+    python main.py                               
     python main.py --data_dir ../RawData         # 指定資料夾
     python main.py --output results              # 指定輸出目錄
     python main.py --skip_gnn                    # 跳過 GNN（資料量小時）
@@ -40,33 +40,33 @@ print(f"使用設備：{DEVICE}")
 # ═══════════════════════════════════════════════
 
 TABLE_SPECS = {
-    "user_info": {
+    "user_info_train": {
         "required": ["user_id", "status"],
         "datetime": ["confirmed_at", "level1_finished_at",
                      "level2_finished_at", "birthday"],
         "int":      ["user_id", "status", "sex", "career",
                      "income_source", "user_source"],
     },
-    "twd_transfer": {
+    "twd_transfer_train": {
         "required": ["user_id", "kind", "ori_samount"],
         "datetime": ["created_at"],
         "int":      ["user_id", "kind"],
         "float":    ["ori_samount", "source_ip"],
     },
-    "crypto_transfer": {
+    "crypto_transfer_train": {
         "required": ["user_id", "kind", "sub_kind", "ori_samount", "twd_srate"],
         "datetime": ["created_at"],
         "int":      ["user_id", "kind", "sub_kind", "protocol"],
         "float":    ["ori_samount", "twd_srate", "source_ip", "relation_user_id"],
         "str":      ["from_wallet", "to_wallet", "currency"],
     },
-    "usdt_twd_trading": {
+    "usdt_twd_trading_train": {
         "required": ["user_id", "is_buy", "trade_samount", "twd_srate"],
         "datetime": ["updated_at"],
         "int":      ["user_id", "is_buy", "is_market", "source"],
         "float":    ["trade_samount", "twd_srate", "source_ip"],
     },
-    "usdt_swap": {
+    "usdt_swap_train": {
         "required": ["user_id", "kind", "twd_samount", "currency_samount"],
         "datetime": ["created_at"],
         "int":      ["user_id", "kind"],
@@ -207,7 +207,7 @@ def train_gnn(
 # 主流程
 # ═══════════════════════════════════════════════
 
-def main(data_dir: str = "rawdata", output_dir: str = "output", skip_gnn: bool = False):
+def main(data_dir: str = "adjust_data/train", output_dir: str = "output", skip_gnn: bool = False):
     os.makedirs(output_dir, exist_ok=True)
 
     # ── Step 1：載入真實 CSV ─────────────────────
@@ -427,8 +427,8 @@ def main(data_dir: str = "rawdata", output_dir: str = "output", skip_gnn: bool =
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="虛擬貨幣黑名單預測訓練")
     parser.add_argument(
-        "--data_dir", default="../RawData",
-        help="CSV 資料夾路徑（預設：../RawData/）",
+        "--data_dir", default="../adjust_data/train",
+        help="CSV 資料夾路徑（預設：../",
     )
     parser.add_argument(
         "--output", default="output",
