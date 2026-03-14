@@ -19,3 +19,5 @@ venv/
 
 # Environment variables
 .env
+
+plot/
