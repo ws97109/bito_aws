@@ -67,7 +67,10 @@ FEATURE_NAME_MAP = {
     "fund_stay_sec":              "資金停留時間（秒）",
     # 圖特徵
     "pagerank_score":             "PageRank 分數",
-    "hop_to_blacklist":           "距黑名單跳數",
+    "graph_in_degree":            "圖入度",
+    "graph_out_degree":           "圖出度",
+    "connected_component_size":   "連通分量大小",
+    "betweenness_centrality":     "介數中心性",
     # 跨表衍生
     "total_tx_count":             "總交易次數",
     "first_to_last_tx_days":      "首末交易間隔（天）",

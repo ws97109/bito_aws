@@ -333,7 +333,7 @@ def main(data_dir: str = "adjust_data/train", output_dir: str = "output", skip_g
 
     # ── Step 5：集成訓練 ─────────────────────────
     print("\n" + "="*55)
-    print("[Step 5] 訓練集成模型（XGBoost + Isolation Forest + GNN）")
+    print("[Step 5] 訓練集成模型（XGBoost + LightGBM + CatBoost + IsoForest）")
     print("="*55)
 
     ensemble = StackingEnsemble(n_splits=5)
@@ -345,9 +345,13 @@ def main(data_dir: str = "adjust_data/train", output_dir: str = "output", skip_g
     print("="*55)
 
     y_proba   = ensemble.predict_proba(X_te, gnn_proba=gnn_te)
-    metrics   = evaluate(y_te, y_proba, label="Stacking Ensemble")
-    optimal_t = find_optimal_threshold(y_te, y_proba)
-    metrics["optimal_threshold"] = float(optimal_t)
+    # 先用 OOF 閾值評估
+    optimal_t = ensemble.oof_threshold
+    metrics   = evaluate(y_te, y_proba, threshold=optimal_t, label=f"Soft Voting Ensemble (t={optimal_t:.2f})")
+    # 再搜索測試集最佳閾值（供參考，不用於最終預測）
+    test_t    = find_optimal_threshold(y_te, y_proba)
+    metrics["oof_threshold"]  = float(optimal_t)
+    metrics["test_threshold"] = float(test_t)
 
     with open(os.path.join(output_dir, "metrics.json"), "w", encoding="utf-8") as f:
         json.dump({k: float(v) for k, v in metrics.items()}, f, indent=2, ensure_ascii=False)
@@ -372,7 +376,7 @@ def main(data_dir: str = "adjust_data/train", output_dir: str = "output", skip_g
     print("="*55)
 
     cf_explainer  = CounterfactualExplainer(
-        ensemble.meta_model, ensemble.scaler, feature_names
+        ensemble.xgb_model, ensemble.scaler, feature_names
     )
     n_report      = min(5, len(y_proba))
     high_risk_idx = np.argsort(y_proba)[-n_report:][::-1]

@@ -338,7 +338,11 @@ def build_graph_features(
 ) -> pd.DataFrame:
     """
     從 crypto_transfer 的內轉關係（sub_kind=1）建圖，
-    提取 PageRank、degree、hop_to_blacklist
+    提取不依賴 label 的圖結構特徵：
+      - PageRank、in/out degree
+      - connected_component_size（連通分量大小）
+      - betweenness_centrality（介數中心性）
+    注意：不使用 hop_to_blacklist（會造成 label leakage）
     """
     df = crypto.copy()
     internal = df[df["sub_kind"] == 1].dropna(subset=["relation_user_id"])
@@ -359,43 +363,26 @@ def build_graph_features(
     in_deg = dict(G.in_degree())
     out_deg = dict(G.out_degree())
 
-    # hop_to_blacklist: BFS 從每個黑名單用戶反向擴散
-    blacklist_ids = set(
-        user_info.loc[user_info.get("status", pd.Series(dtype=int)) == 1, "user_id"]
-    )
-    hop_map = {}
-    if blacklist_ids:
-        # 建立無向圖做 BFS（雙向可達）
-        G_undirected = G.to_undirected()
-        # 多源 BFS：從所有黑名單節點同時出發
-        visited = {}
-        queue = []
-        for bid in blacklist_ids:
-            if bid in G_undirected:
-                visited[bid] = 0
-                queue.append(bid)
-        qi = 0
-        while qi < len(queue):
-            node = queue[qi]
-            qi += 1
-            for neighbor in G_undirected.neighbors(node):
-                if neighbor not in visited:
-                    visited[neighbor] = visited[node] + 1
-                    queue.append(neighbor)
-        hop_map = visited
+    # 連通分量大小（無向圖）— 人頭戶常在同一群組
+    G_undirected = G.to_undirected()
+    comp_size = {}
+    for comp in nx.connected_components(G_undirected):
+        size = len(comp)
+        for node in comp:
+            comp_size[node] = size
+
+    # 介數中心性（取樣加速，抓資金中繼站）
+    # 全量計算太慢，用近似法取樣 500 個節點
+    bc = nx.betweenness_centrality(G, k=min(500, len(G)), seed=42)
 
     feat = pd.DataFrame({
         "pagerank_score": pd.Series(pr),
         "graph_in_degree": pd.Series(in_deg),
         "graph_out_degree": pd.Series(out_deg),
-        "hop_to_blacklist": pd.Series(hop_map),
+        "connected_component_size": pd.Series(comp_size),
+        "betweenness_centrality": pd.Series(bc),
     })
     feat.index.name = "user_id"
-
-    # 不可達的用戶設為 max_hop + 1（保持數值尺度一致，避免偏斜）
-    max_hop = int(feat["hop_to_blacklist"].dropna().max()) if len(hop_map) > 0 else 0
-    unreachable_value = max_hop + 1
-    feat["hop_to_blacklist"] = feat["hop_to_blacklist"].fillna(unreachable_value).astype(int)
     feat = feat.fillna(0)
 
     return feat
