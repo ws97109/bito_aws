@@ -1,6 +1,6 @@
 """
 Graph Neural Network Module
-論文核心：用 GNN 捕捉錢包地址圖譜中的風險傳播
+用 GNN 捕捉錢包地址圖譜中的風險傳播
 採用 GraphSAGE + 異質圖（用戶節點 + 錢包節點）
 """
 import torch
@@ -36,10 +36,14 @@ def build_transaction_graph(
     all_users = user_features.index.tolist()
     user_to_idx = {uid: i for i, uid in enumerate(all_users)}
 
+    # 使用正確的欄位名稱：from_wallet_hash / to_wallet_hash
+    wallet_from_col = "from_wallet_hash" if "from_wallet_hash" in crypto.columns else "from_wallet"
+    wallet_to_col = "to_wallet_hash" if "to_wallet_hash" in crypto.columns else "to_wallet"
+
     external = crypto[crypto["sub_kind"] == 0].copy()
     wallets = pd.concat([
-        external["from_wallet"].dropna(),
-        external["to_wallet"].dropna(),
+        external[wallet_from_col].dropna(),
+        external[wallet_to_col].dropna(),
     ]).unique().tolist()
     wallet_to_idx = {w: i for i, w in enumerate(wallets)}
 
@@ -48,17 +52,21 @@ def build_transaction_graph(
     data["user"].x = torch.tensor(user_feat_np)
     data["user"].num_nodes = len(all_users)
 
-    # ── 錢包節點特徵（無特徵，用 degree 初始化）──
+    # ── 錢包節點特徵（無特徵，用零向量初始化）──
     data["wallet"].x = torch.zeros(len(wallets), 4, dtype=torch.float)
     data["wallet"].num_nodes = len(wallets)
 
-    # ── 邊：user → wallet（提領）──
-    withdrawals = external[external["kind"] == 1].dropna(subset=["to_wallet"])
+    # ── 邊：user → wallet（提領）── 向量化建圖
+    withdrawals = external[external["kind"] == 1].dropna(subset=[wallet_to_col])
+    wit_uids = withdrawals["user_id"].values
+    wit_wids = withdrawals[wallet_to_col].values
+
     src_u, dst_w = [], []
-    for _, row in withdrawals.iterrows():
-        uid = row["user_id"]
-        wid = row["to_wallet"]
-        if uid in user_to_idx and wid in wallet_to_idx:
+    # 用集合加速查詢
+    valid_users = set(user_to_idx.keys())
+    valid_wallets = set(wallet_to_idx.keys())
+    for uid, wid in zip(wit_uids, wit_wids):
+        if uid in valid_users and wid in valid_wallets:
             src_u.append(user_to_idx[uid])
             dst_w.append(wallet_to_idx[wid])
     if src_u:
@@ -67,12 +75,13 @@ def build_transaction_graph(
         )
 
     # ── 邊：wallet → user（加值）──
-    deposits = external[external["kind"] == 0].dropna(subset=["from_wallet"])
+    deposits = external[external["kind"] == 0].dropna(subset=[wallet_from_col])
+    dep_uids = deposits["user_id"].values
+    dep_wids = deposits[wallet_from_col].values
+
     src_w2, dst_u2 = [], []
-    for _, row in deposits.iterrows():
-        uid = row["user_id"]
-        wid = row["from_wallet"]
-        if uid in user_to_idx and wid in wallet_to_idx:
+    for uid, wid in zip(dep_uids, dep_wids):
+        if uid in valid_users and wid in valid_wallets:
             src_w2.append(wallet_to_idx[wid])
             dst_u2.append(user_to_idx[uid])
     if src_w2:
@@ -80,25 +89,28 @@ def build_transaction_graph(
             [src_w2, dst_u2], dtype=torch.long
         )
 
-    # ── 邊：user → user（內轉）──
+    # ── 邊：user → user（內轉）── 向量化
     internal = crypto[
         (crypto["sub_kind"] == 1) &
         (crypto["relation_user_id"].notna())
     ].copy()
+    internal["relation_user_id"] = internal["relation_user_id"].astype(int)
+
+    int_uids = internal["user_id"].values
+    int_peers = internal["relation_user_id"].values
+
     src_uu, dst_uu = [], []
-    for _, row in internal.iterrows():
-        uid  = row["user_id"]
-        peer = row["relation_user_id"]
-        if uid in user_to_idx and peer in user_to_idx:
+    for uid, peer in zip(int_uids, int_peers):
+        if uid in valid_users and peer in valid_users:
             src_uu.append(user_to_idx[uid])
-            dst_uu.append(user_to_idx[int(peer)])
+            dst_uu.append(user_to_idx[peer])
     if src_uu:
         data["user", "transfers", "user"].edge_index = torch.tensor(
             [src_uu, dst_uu], dtype=torch.long
         )
 
-    data.user_to_idx    = user_to_idx
-    data.wallet_to_idx  = wallet_to_idx
+    data.user_to_idx   = user_to_idx
+    data.wallet_to_idx = wallet_to_idx
 
     return data
 
@@ -109,10 +121,9 @@ def build_transaction_graph(
 
 class HeteroGNNEncoder(nn.Module):
     """
-    論文架構：
-      Layer 1: HeteroSAGE（收集鄰域資訊）
-      Layer 2: GATConv（注意力加權）
-      Layer 3: MLP 頭（輸出風險分數）
+    Layer 1: HeteroSAGE（收集鄰域資訊）
+    Layer 2: GATConv（注意力加權）
+    Layer 3: MLP 頭（輸出風險分數）
     """
     def __init__(self, user_in_dim: int, hidden_dim: int = 128, out_dim: int = 64):
         super().__init__()

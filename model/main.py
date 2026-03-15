@@ -30,6 +30,7 @@ from Gnn_model import build_transaction_graph, BlacklistGNN
 from ensemble import StackingEnsemble, evaluate, find_optimal_threshold
 from shap_explainer import (
     SHAPExplainer, CounterfactualExplainer, generate_user_report,
+    SSREvaluator,
 )
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -396,6 +397,35 @@ def main(data_dir: str = "adjust_data/train", output_dir: str = "output", skip_g
     with open(os.path.join(output_dir, "risk_reports.txt"), "w", encoding="utf-8") as f:
         f.write("\n\n".join(reports))
 
+    # ── Step 8.5：SSR 穩定性評測 ──────────────────
+    print("\n" + "="*55)
+    print("[Step 8.5] SSR 穩定性評測")
+    print("="*55)
+
+    ssr_evaluator = SSREvaluator(explainer, feature_names)
+    ssr_results = ssr_evaluator.evaluate(
+        X_te_scaled, y_te,
+        epsilons=[0.05, 0.10, 0.15, 0.20],
+        top_k_list=[1, 3, 5],
+        n_samples=min(500, len(X_te_scaled)),
+        n_perturbations=10,
+    )
+    ssr_evaluator.plot_ssr_curves(
+        ssr_results,
+        save_path=os.path.join(output_dir, "ssr_curves.png"),
+    )
+
+    with open(os.path.join(output_dir, "ssr_results.json"), "w", encoding="utf-8") as f:
+        # 將 tuple key 轉為 string
+        serializable = {
+            "overall": {f"eps={e}_k={k}": v for (e, k), v in ssr_results["overall"].items()},
+            "by_class": {
+                str(cls): {f"eps={e}_k={k}": v for (e, k), v in vals.items()}
+                for cls, vals in ssr_results["by_class"].items()
+            }
+        }
+        json.dump(serializable, f, indent=2, ensure_ascii=False)
+
     # ── Step 9：全量評分 ─────────────────────────
     print("\n" + "="*55)
     print("[Step 9] 全量用戶風險評分輸出")
@@ -430,13 +460,17 @@ def main(data_dir: str = "adjust_data/train", output_dir: str = "output", skip_g
     print(f"\n{'='*55}")
     print(f"  完成！輸出目錄：{out}/")
     print(f"{'='*55}")
-    print(f"  features.csv          特徵矩陣")
-    print(f"  metrics.json          評估指標")
-    print(f"  user_risk_scores.csv  全量風險評分")
-    print(f"  shap_global.png       特徵重要性圖")
-    print(f"  risk_reports.txt      高風險個體報告")
+    print(f"  features_raw.csv                原始特徵矩陣（60）")
+    print(f"  features.csv                    篩選後特徵矩陣（47）")
+    print(f"  feature_selection_report.json    特徵篩選報告")
+    print(f"  metrics.json                    評估指標")
+    print(f"  user_risk_scores.csv            全量風險評分")
+    print(f"  shap_global.png                 特徵重要性圖")
+    print(f"  risk_reports.txt                高風險個體報告")
+    print(f"  ssr_results.json                SSR 穩定性數據")
+    print(f"  ssr_curves.png                  SSR 衰減曲線圖")
     if not skip_gnn and gnn_proba_all is not None:
-        print(f"  gnn_model.pt          GNN 模型權重")
+        print(f"  gnn_model.pt                    GNN 模型權重")
 
     return ensemble, result_df, metrics
 
