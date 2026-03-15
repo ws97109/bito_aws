@@ -75,6 +75,13 @@ FEATURE_NAME_MAP = {
     "total_tx_count":             "總交易次數",
     "first_to_last_tx_days":      "首末交易間隔（天）",
     "weekend_tx_ratio":           "週末交易佔比",
+    # 行為紅旗
+    "dep_to_first_wit_hours":     "入金到首筆提領時間（小時）",
+    "twd_to_crypto_out_ratio":    "法幣入金/幣出比",
+    "tx_amount_cv":               "交易金額變異係數",
+    "rapid_kyc_then_trade":       "KYC後48小時內交易",
+    "crypto_out_in_ratio":        "加密貨幣出入比",
+    "same_day_in_out_count":      "同天入出金天數",
 }
 
 

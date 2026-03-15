@@ -461,7 +461,130 @@ def build_cross_table_features(
 
 
 # ─────────────────────────────────────────────
-# 9. 整合所有特徵
+# 9. 行為紅旗特徵（高區分力）
+# ─────────────────────────────────────────────
+
+def build_red_flag_features(
+    twd: pd.DataFrame,
+    crypto: pd.DataFrame,
+    user_info: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    基於 AML 紅旗文獻設計的高區分力特徵：
+    - deposit_to_first_withdraw_hours: 入金到第一筆提領的時間
+    - twd_to_crypto_out_ratio: 法幣入金 / 加密貨幣出幣比
+    - tx_amount_cv: 交易金額變異係數（Smurfing 偵測）
+    - rapid_kyc_then_trade: KYC 後 48 小時內大額交易旗標
+    - crypto_out_in_ratio: 加密貨幣出幣/入幣比
+    - same_day_in_out_count: 同天入金又出金次數
+    """
+    t = twd.copy()
+    c = crypto.copy()
+    t["ts"] = pd.to_datetime(t["created_at"])
+    c["ts"] = pd.to_datetime(c["created_at"])
+    t["amount"] = t["ori_samount"] * SCALE
+    c["amount"] = c["ori_samount"] * SCALE * c["twd_srate"] * SCALE
+
+    all_user_ids = user_info["user_id"].unique()
+
+    # ── 1. deposit_to_first_withdraw_hours ──
+    # 每個用戶的「第一筆入金 → 第一筆提領」間隔
+    records_dfwh = []
+    for df in [t, c]:
+        for uid, grp in df.groupby("user_id"):
+            grp = grp.sort_values("ts")
+            first_dep = grp[grp["kind"] == 0]["ts"].min()
+            first_wit = grp[grp["kind"] == 1]["ts"].min()
+            if pd.isna(first_dep) or pd.isna(first_wit):
+                continue
+            if first_wit >= first_dep:
+                hours = (first_wit - first_dep) / np.timedelta64(1, "h")
+                records_dfwh.append({"user_id": uid, "dep_to_first_wit_hours": hours})
+
+    if records_dfwh:
+        dfwh = pd.DataFrame(records_dfwh).groupby("user_id")["dep_to_first_wit_hours"].min()
+    else:
+        dfwh = pd.Series(dtype=float, name="dep_to_first_wit_hours")
+    dfwh.index.name = "user_id"
+
+    # ── 2. twd_to_crypto_out_ratio ──
+    # 法幣入金總額 / 加密貨幣出幣總額（抓「法幣→幣→鏈上」洗錢鏈）
+    twd_dep = t[t["kind"] == 0].groupby("user_id")["amount"].sum().rename("_twd_dep")
+    crypto_wit = c[c["kind"] == 1].groupby("user_id")["amount"].sum().rename("_crypto_wit")
+    ratio_df = twd_dep.to_frame().join(crypto_wit, how="outer").fillna(0)
+    twd_crypto_ratio = (
+        ratio_df["_twd_dep"] / (ratio_df["_crypto_wit"] + 1e-9)
+    ).clip(upper=100).rename("twd_to_crypto_out_ratio")
+
+    # ── 3. tx_amount_cv ──
+    # 所有交易金額的變異係數，Smurfing 的 CV 會很低
+    all_amounts = pd.concat([
+        t[["user_id", "amount"]],
+        c[["user_id", "amount"]],
+    ], ignore_index=True)
+    amount_stats = all_amounts.groupby("user_id")["amount"].agg(["mean", "std", "count"])
+    tx_amount_cv = (amount_stats["std"] / (amount_stats["mean"] + 1e-9)).rename("tx_amount_cv")
+    # count >= 3 才有意義，否則設為 0
+    tx_amount_cv[amount_stats["count"] < 3] = 0
+
+    # ── 4. rapid_kyc_then_trade ──
+    # KYC Level 2 完成後 48 小時內就有交易的旗標
+    ui = user_info[["user_id", "level2_finished_at"]].copy()
+    ui["kyc2_ts"] = pd.to_datetime(ui["level2_finished_at"])
+    ui = ui.set_index("user_id")
+
+    all_tx_ts = pd.concat([
+        t[["user_id", "ts"]],
+        c[["user_id", "ts"]],
+    ], ignore_index=True)
+    first_tx = all_tx_ts.groupby("user_id")["ts"].min().rename("first_tx_ts")
+
+    kyc_trade = ui[["kyc2_ts"]].join(first_tx, how="left")
+    kyc_trade["hours_after_kyc"] = (
+        (kyc_trade["first_tx_ts"] - kyc_trade["kyc2_ts"]).dt.total_seconds() / 3600
+    )
+    rapid_kyc = (
+        (kyc_trade["hours_after_kyc"].between(0, 48))
+    ).astype(int).rename("rapid_kyc_then_trade")
+
+    # ── 5. crypto_out_in_ratio ──
+    crypto_dep = c[c["kind"] == 0].groupby("user_id")["amount"].sum().rename("_c_dep")
+    crypto_out = c[c["kind"] == 1].groupby("user_id")["amount"].sum().rename("_c_out")
+    coi = crypto_dep.to_frame().join(crypto_out, how="outer").fillna(0)
+    crypto_out_in_ratio = (
+        coi["_c_out"] / (coi["_c_dep"] + 1e-9)
+    ).clip(upper=10).rename("crypto_out_in_ratio")
+
+    # ── 6. same_day_in_out_count ──
+    # 同天既有入金又有出金的天數
+    for df in [t, c]:
+        df["date"] = df["ts"].dt.date
+
+    def count_same_day_in_out(df):
+        dep_dates = df[df["kind"] == 0].groupby("user_id")["date"].apply(set)
+        wit_dates = df[df["kind"] == 1].groupby("user_id")["date"].apply(set)
+        both = dep_dates.to_frame("dep").join(wit_dates.rename("wit"), how="inner")
+        return both.apply(lambda r: len(r["dep"] & r["wit"]), axis=1)
+
+    sd_twd = count_same_day_in_out(t)
+    sd_crypto = count_same_day_in_out(c)
+    same_day = sd_twd.add(sd_crypto, fill_value=0).rename("same_day_in_out_count")
+
+    # ── 合併 ──
+    feat = pd.DataFrame(index=pd.Index(all_user_ids, name="user_id"))
+    feat = feat.join(dfwh)
+    feat = feat.join(twd_crypto_ratio)
+    feat = feat.join(tx_amount_cv)
+    feat = feat.join(rapid_kyc)
+    feat = feat.join(crypto_out_in_ratio)
+    feat = feat.join(same_day)
+    feat = feat.fillna(0)
+
+    return feat
+
+
+# ─────────────────────────────────────────────
+# 10. 整合所有特徵
 # ─────────────────────────────────────────────
 
 def build_all_features(
@@ -479,6 +602,7 @@ def build_all_features(
     f_vel     = build_velocity_features(twd, crypto)
     f_graph   = build_graph_features(crypto, user_info)
     f_cross   = build_cross_table_features(twd, crypto, trading, swap)
+    f_red     = build_red_flag_features(twd, crypto, user_info)
 
     feat = (
         f_user
@@ -489,6 +613,7 @@ def build_all_features(
         .join(f_vel,     how="left")
         .join(f_graph,   how="left")
         .join(f_cross,   how="left")
+        .join(f_red,     how="left")
     ).fillna(0)
 
     # 複合風險分數（手工特徵交叉）
