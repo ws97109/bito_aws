@@ -25,6 +25,7 @@ sys.path.insert(0, ROOT)
 
 # 直接從當前目錄導入（所有模組都在 model/ 目錄下）
 from Feature_rngineering import build_all_features
+from feature_selection import select_features
 from Gnn_model import build_transaction_graph, BlacklistGNN
 from ensemble import StackingEnsemble, evaluate, find_optimal_threshold
 from shap_explainer import (
@@ -238,12 +239,32 @@ def main(data_dir: str = "adjust_data/train", output_dir: str = "output", skip_g
     feat_df = feat_df.replace([np.inf, -np.inf], np.nan).fillna(0)
 
     y             = feat_df["status"].values.astype(int)
-    X             = feat_df.drop(columns=["status"]).values.astype(np.float32)
-    feature_names = feat_df.drop(columns=["status"]).columns.tolist()
+    X_raw         = feat_df.drop(columns=["status"])
 
     print(f"\n  用戶總數    : {len(feat_df):,}")
-    print(f"  特徵維度    : {X.shape[1]}")
+    print(f"  原始特徵    : {X_raw.shape[1]}")
     print(f"  黑名單用戶  : {y.sum():,} ({y.mean()*100:.2f}%)")
+
+    feat_df.to_csv(os.path.join(output_dir, "features_raw.csv"))
+
+    # ── Step 2.5：特徵篩選 ─────────────────────────
+    print("\n" + "="*55)
+    print("[Step 2.5] 特徵篩選（零方差 → 高相關 → 重要性）")
+    print("="*55)
+
+    X_selected, selection_report = select_features(X_raw, y, corr_threshold=0.95)
+
+    with open(os.path.join(output_dir, "feature_selection_report.json"), "w", encoding="utf-8") as f:
+        json.dump(selection_report, f, indent=2, ensure_ascii=False)
+
+    X             = X_selected.values.astype(np.float32)
+    feature_names = X_selected.columns.tolist()
+
+    print(f"\n  篩選後特徵  : {X.shape[1]}")
+
+    # 更新 feat_df 為篩選後版本（後續 GNN、SHAP 使用）
+    feat_df = X_selected.copy()
+    feat_df["status"] = y
 
     feat_df.to_csv(os.path.join(output_dir, "features.csv"))
 
