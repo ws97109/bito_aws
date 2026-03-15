@@ -6,6 +6,7 @@ import pandas as pd
 import numpy as np
 from typing import Optional
 import ipaddress
+import networkx as nx
 
 
 SCALE = 1e-8  # 所有金額欄位需乘以此係數
@@ -26,7 +27,6 @@ def build_user_features(user_info: pd.DataFrame) -> pd.DataFrame:
     df["confirmed_at"]        = pd.to_datetime(df["confirmed_at"])
     df["level1_finished_at"]  = pd.to_datetime(df["level1_finished_at"])
     df["level2_finished_at"]  = pd.to_datetime(df["level2_finished_at"])
-    df["birthday"]            = pd.to_datetime(df["birthday"])
 
     # KYC 完成狀態
     df["has_kyc_level2"] = df["level2_finished_at"].notna().astype(int)
@@ -39,9 +39,8 @@ def build_user_features(user_info: pd.DataFrame) -> pd.DataFrame:
     # 帳號年齡（天）
     df["account_age_days"] = (now - df["confirmed_at"]).dt.days.clip(lower=0)
 
-    # 年齡
-    df["age"] = (now - df["birthday"]).dt.days / 365.25
-    df["age"] = df["age"].clip(lower=0, upper=120)
+    # 年齡（資料中已是數值欄位）
+    df["age"] = pd.to_numeric(df["age"], errors="coerce").clip(lower=0, upper=120)
 
     # 高風險職業 / 收入來源
     df["is_high_risk_career"] = df["career"].isin(HIGH_RISK_CAREERS).astype(int)
@@ -91,8 +90,13 @@ def build_twd_features(twd: pd.DataFrame) -> pd.DataFrame:
     wit_agg = agg(withdraw, "twd_wit")
     feat = dep_agg.join(wit_agg, how="outer").fillna(0)
 
-    # 出 / 入比率（接近 1 表示幾乎全部提出）
-    feat["twd_withdraw_ratio"] = feat["twd_wit_sum"] / (feat["twd_dep_sum"] + 1e-9)
+    # 淨流入金額（負值代表資金淨流出）
+    feat["twd_net_flow"] = feat["twd_dep_sum"] - feat["twd_wit_sum"]
+
+    # 出 / 入比率（接近 1 表示幾乎全部提出，cap 在 10 避免分母趨近 0 導致爆炸）
+    feat["twd_withdraw_ratio"] = (
+        feat["twd_wit_sum"] / (feat["twd_dep_sum"] + 1e-9)
+    ).clip(upper=10)
 
     # 結構化交易偵測：金額標準差小（金額高度一致 → Smurfing）
     feat["twd_smurf_flag"] = (
@@ -101,7 +105,7 @@ def build_twd_features(twd: pd.DataFrame) -> pd.DataFrame:
     ).astype(int)
 
     # 提領是否有 IP（無 IP = 外部觸發，有 IP = 站內操作）
-    wit_ip = withdraw.groupby("user_id")["source_ip"].apply(
+    wit_ip = withdraw.groupby("user_id")["source_ip_hash"].apply(
         lambda x: x.notna().mean()
     ).rename("twd_wit_ip_ratio")
     feat = feat.join(wit_ip, how="left").fillna(0)
@@ -152,15 +156,29 @@ def build_crypto_features(crypto: pd.DataFrame) -> pd.DataFrame:
           .reindex(feat.index, fill_value=0)
     )
 
-    # 內轉對象數（relation_user_id 不重複數）
+    # 不同錢包地址數（分散資金到多錢包是洗錢典型手法）
+    wallets = pd.concat([
+        df[["user_id", "from_wallet_hash"]].rename(columns={"from_wallet_hash": "wallet"}),
+        df[["user_id", "to_wallet_hash"]].rename(columns={"to_wallet_hash": "wallet"}),
+    ]).dropna(subset=["wallet"])
+    feat["crypto_wallet_hash_nunique"] = (
+        wallets.groupby("user_id")["wallet"].nunique()
+               .reindex(feat.index, fill_value=0)
+    )
+
+    # 內轉次數與內轉對象數
     internal = df[df["sub_kind"] == 1]
+    feat["crypto_internal_count"] = (
+        internal.groupby("user_id").size()
+                .reindex(feat.index, fill_value=0)
+    )
     feat["crypto_internal_peer_count"] = (
         internal.groupby("user_id")["relation_user_id"].nunique()
                 .reindex(feat.index, fill_value=0)
     )
 
     # 提領 IP 覆蓋率
-    wit_ip = withdraw.groupby("user_id")["source_ip"].apply(
+    wit_ip = withdraw.groupby("user_id")["source_ip_hash"].apply(
         lambda x: x.notna().mean()
     ).rename("crypto_wit_ip_ratio")
     feat = feat.join(wit_ip, how="left").fillna(0)
@@ -233,15 +251,15 @@ def build_ip_features(
 ) -> pd.DataFrame:
     frames = []
     for df, ts_col in [(twd, "created_at"), (crypto, "created_at"), (trading, "updated_at")]:
-        tmp = df[["user_id", "source_ip", ts_col]].copy()
+        tmp = df[["user_id", "source_ip_hash", ts_col]].copy()
         tmp["ts"] = pd.to_datetime(tmp[ts_col])
-        frames.append(tmp[["user_id", "source_ip", "ts"]])
+        frames.append(tmp[["user_id", "source_ip_hash", "ts"]])
 
-    all_ip = pd.concat(frames, ignore_index=True).dropna(subset=["source_ip"])
+    all_ip = pd.concat(frames, ignore_index=True).dropna(subset=["source_ip_hash"])
     all_ip["hour"] = all_ip["ts"].dt.hour
 
     # 每個 user 使用的唯一 IP 數
-    feat = all_ip.groupby("user_id")["source_ip"].agg(
+    feat = all_ip.groupby("user_id")["source_ip_hash"].agg(
         ip_unique_count="nunique",
         ip_total_count="count",
     )
@@ -256,10 +274,10 @@ def build_ip_features(
 
     # 同一 IP 被多少不同 user 使用（IP 共用風險）
     ip_user_count = (
-        all_ip.groupby("source_ip")["user_id"].nunique()
+        all_ip.groupby("source_ip_hash")["user_id"].nunique()
               .rename("ip_shared_user_count")
     )
-    all_ip = all_ip.join(ip_user_count, on="source_ip")
+    all_ip = all_ip.join(ip_user_count, on="source_ip_hash")
     feat["ip_max_shared"] = (
         all_ip.groupby("user_id")["ip_shared_user_count"].max()
               .reindex(feat.index, fill_value=1)
@@ -311,7 +329,152 @@ def build_velocity_features(
 
 
 # ─────────────────────────────────────────────
-# 7. 整合所有特徵
+# 7. 輕量圖特徵（crypto_transfer 內轉關係）
+# ─────────────────────────────────────────────
+
+def build_graph_features(
+    crypto: pd.DataFrame,
+    user_info: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    從 crypto_transfer 的內轉關係（sub_kind=1）建圖，
+    提取 PageRank、degree、hop_to_blacklist
+    """
+    df = crypto.copy()
+    internal = df[df["sub_kind"] == 1].dropna(subset=["relation_user_id"])
+    internal["relation_user_id"] = internal["relation_user_id"].astype(int)
+
+    all_user_ids = user_info["user_id"].unique()
+
+    # 建立有向圖
+    G = nx.DiGraph()
+    G.add_nodes_from(all_user_ids)
+    edges = list(zip(internal["user_id"], internal["relation_user_id"]))
+    G.add_edges_from(edges)
+
+    # PageRank
+    pr = nx.pagerank(G, alpha=0.85, max_iter=100)
+
+    # in_degree / out_degree
+    in_deg = dict(G.in_degree())
+    out_deg = dict(G.out_degree())
+
+    # hop_to_blacklist: BFS 從每個黑名單用戶反向擴散
+    blacklist_ids = set(
+        user_info.loc[user_info.get("status", pd.Series(dtype=int)) == 1, "user_id"]
+    )
+    hop_map = {}
+    if blacklist_ids:
+        # 建立無向圖做 BFS（雙向可達）
+        G_undirected = G.to_undirected()
+        # 多源 BFS：從所有黑名單節點同時出發
+        visited = {}
+        queue = []
+        for bid in blacklist_ids:
+            if bid in G_undirected:
+                visited[bid] = 0
+                queue.append(bid)
+        qi = 0
+        while qi < len(queue):
+            node = queue[qi]
+            qi += 1
+            for neighbor in G_undirected.neighbors(node):
+                if neighbor not in visited:
+                    visited[neighbor] = visited[node] + 1
+                    queue.append(neighbor)
+        hop_map = visited
+
+    feat = pd.DataFrame({
+        "pagerank_score": pd.Series(pr),
+        "graph_in_degree": pd.Series(in_deg),
+        "graph_out_degree": pd.Series(out_deg),
+        "hop_to_blacklist": pd.Series(hop_map),
+    })
+    feat.index.name = "user_id"
+
+    # 不可達的用戶設為 max_hop + 1（保持數值尺度一致，避免偏斜）
+    max_hop = int(feat["hop_to_blacklist"].dropna().max()) if len(hop_map) > 0 else 0
+    unreachable_value = max_hop + 1
+    feat["hop_to_blacklist"] = feat["hop_to_blacklist"].fillna(unreachable_value).astype(int)
+    feat = feat.fillna(0)
+
+    return feat
+
+
+# ─────────────────────────────────────────────
+# 8. 跨表衍生特徵
+# ─────────────────────────────────────────────
+
+def build_cross_table_features(
+    twd: pd.DataFrame,
+    crypto: pd.DataFrame,
+    trading: pd.DataFrame,
+    swap: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    跨表整合：總交易次數、首末交易間隔、週末交易比、行為加速偵測
+    """
+    # 收集所有交易的 (user_id, timestamp)
+    frames = []
+    for df, ts_col in [
+        (twd, "created_at"), (crypto, "created_at"),
+        (trading, "updated_at"), (swap, "created_at"),
+    ]:
+        tmp = df[["user_id"]].copy()
+        tmp["ts"] = pd.to_datetime(df[ts_col])
+        frames.append(tmp)
+
+    all_tx = pd.concat(frames, ignore_index=True).dropna(subset=["ts"])
+
+    # 總交易次數
+    total_count = all_tx.groupby("user_id").size().rename("total_tx_count")
+
+    # 首末交易間隔（天）
+    ts_range = all_tx.groupby("user_id")["ts"].agg(["min", "max"])
+    first_to_last = ((ts_range["max"] - ts_range["min"]).dt.days).rename("first_to_last_tx_days")
+
+    # 週末交易佔比
+    all_tx["is_weekend"] = all_tx["ts"].dt.dayofweek.isin([5, 6]).astype(int)
+    weekend_ratio = (
+        all_tx.groupby("user_id")["is_weekend"].mean()
+              .rename("weekend_tx_ratio")
+    )
+
+    # 行為加速偵測：近 7 天交易頻率 / 近 30 天日均
+    max_ts = all_tx["ts"].max()
+    cutoff_7d = max_ts - pd.Timedelta(days=7)
+    cutoff_30d = max_ts - pd.Timedelta(days=30)
+
+    cnt_7d = (
+        all_tx[all_tx["ts"] >= cutoff_7d]
+        .groupby("user_id").size()
+        .rename("cnt_7d")
+    )
+    cnt_30d = (
+        all_tx[all_tx["ts"] >= cutoff_30d]
+        .groupby("user_id").size()
+        .rename("cnt_30d")
+    )
+    velocity = cnt_7d.to_frame().join(cnt_30d, how="outer").fillna(0)
+    # 近 7 天日均 / 近 30 天日均
+    velocity["velocity_ratio_7d_vs_30d"] = (
+        (velocity["cnt_7d"] / 7) / (velocity["cnt_30d"] / 30 + 1e-9)
+    )
+
+    feat = pd.DataFrame({
+        "total_tx_count": total_count,
+        "first_to_last_tx_days": first_to_last,
+        "weekend_tx_ratio": weekend_ratio,
+        "velocity_ratio_7d_vs_30d": velocity["velocity_ratio_7d_vs_30d"],
+    })
+    feat.index.name = "user_id"
+    feat = feat.fillna(0)
+
+    return feat
+
+
+# ─────────────────────────────────────────────
+# 9. 整合所有特徵
 # ─────────────────────────────────────────────
 
 def build_all_features(
@@ -327,6 +490,8 @@ def build_all_features(
     f_trading = build_trading_features(trading, swap)
     f_ip      = build_ip_features(twd, crypto, trading)
     f_vel     = build_velocity_features(twd, crypto)
+    f_graph   = build_graph_features(crypto, user_info)
+    f_cross   = build_cross_table_features(twd, crypto, trading, swap)
 
     feat = (
         f_user
@@ -335,6 +500,8 @@ def build_all_features(
         .join(f_trading, how="left")
         .join(f_ip,      how="left")
         .join(f_vel,     how="left")
+        .join(f_graph,   how="left")
+        .join(f_cross,   how="left")
     ).fillna(0)
 
     # 複合風險分數（手工特徵交叉）

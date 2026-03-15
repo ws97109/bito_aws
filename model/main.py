@@ -140,7 +140,7 @@ def load_and_validate(data_dir: str) -> dict:
                 print(f"      {col:<32} {cnt:>7} ({cnt/len(df)*100:.1f}%)")
 
         # user_info 特殊：確認有黑名單
-        if name == "user_info":
+        if name == "user_info_train":
             vc      = df["status"].value_counts().sort_index()
             n_black = int((df["status"] == 1).sum())
             print(f"    status 分布  : {dict(vc)}")
@@ -216,11 +216,11 @@ def main(data_dir: str = "adjust_data/train", output_dir: str = "output", skip_g
     print("="*55)
 
     tables    = load_and_validate(data_dir)
-    user_info = tables["user_info"]
-    twd       = tables["twd_transfer"]
-    crypto    = tables["crypto_transfer"]
-    trading   = tables["usdt_twd_trading"]
-    swap      = tables["usdt_swap"]
+    user_info = tables["user_info_train"]
+    twd       = tables["twd_transfer_train"]
+    crypto    = tables["crypto_transfer_train"]
+    trading   = tables["usdt_twd_trading_train"]
+    swap      = tables["usdt_swap_train"]
 
     # ── Step 2：特徵工程 ─────────────────────────
     print("\n" + "="*55)

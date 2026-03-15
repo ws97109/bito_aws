@@ -26,11 +26,18 @@
 
 | 權重 | 項目 | 說明 |
 |------|------|------|
-| **40%** | 模型辨識效能 | Precision、Recall、FPR、**F1-score（主要依據）** |
+| **40%** | 模型辨識效能 | 以混淆矩陣為基礎，綜合評估 Precision、Recall、FPR，**以 F1-score 作為主要比較依據** |
 | **30%** | 風險說明能力 | SHAP/LIME 可解釋性，解釋為何判定為高風險，且符合實務邏輯 |
 | **15%** | 完整性與實務可用性 | 系統完整度、體驗流暢、支援風控決策流程 |
 | **10%** | 主題切合及創意度 | 原創性，展現前所未有的構想 |
 | **5%** | 加分項 | 視覺化關聯圖譜（GNN）、採用 AWS Kiro AI 整合開發環境 |
+
+### 官方評分機制
+
+- **官方持有 predict_label（12,753 筆）的真實答案**，會直接用繳交的 CSV 對答案計算指標
+- 官方未明確說明 F1 是 `F1(class=1)` 或 `macro-F1`，但根據官方用詞（「捕捉率」、「低誤判率」、「識別黑名單」）及 AML 業界慣例，**推定為 F1(class=1)**
+- 繳交的是硬標籤（0/1），不是機率值 → **閾值選擇直接決定最終分數**
+- 簡報中建議同時呈現 `F1(class=1)` 和 `macro-F1`，確保不論官方採用哪個都有數字可展示
 
 ### 核心能力要求
 
@@ -182,6 +189,27 @@ user_info (63,770 users)
 | `weekend_tx_ratio` | 週末交易佔比 | 異常交易時段 |
 | `deposit_to_withdraw_speed` | 入金到出金的平均間隔（小時） | 快進快出核心指標 |
 
+### 4.6 輕量圖特徵（from crypto_transfer 內轉關係）
+
+> 文獻支持：不需要完整 GNN，用 NetworkX 從 `crypto_transfer`（sub_kind=1）的內轉關係建圖，即可低成本提取高預測力的圖結構特徵。
+
+| 特徵 | 說明 | 人頭戶意義 |
+|------|------|-----------|
+| `pagerank_score` | 用戶在內轉圖中的 PageRank 分數 | 資金流向中心性，中間人帳戶分數高 |
+| `in_degree` / `out_degree` | 內轉圖的入度/出度 | Smurfing 模式（多入少出 or 少入多出） |
+| `hop_to_blacklist` | BFS 到最近已知黑名單用戶的跳數 | 文獻中最具預測力的圖特徵之一 |
+| `degree_ratio` | 出度/入度比 | 資金流向不對稱性 |
+
+### 4.7 時序速度特徵（補充）
+
+> 文獻支持（Google Cloud AML AI、Feedzai）：行為基線偏離比累計絕對值更能捕捉人頭戶模式。
+
+| 特徵 | 說明 | 人頭戶意義 |
+|------|------|-----------|
+| `first_withdraw_after_deposit_hours` | 入金後第一筆出金的時間間隔 | 比平均間隔更精準的快進快出指標 |
+| `velocity_ratio_7d_vs_30d` | 近 7 天交易頻率 / 近 30 天日均 | 行為加速偵測（突然活躍） |
+| `max_single_vs_avg_ratio` | 最大單筆金額 / 平均單筆金額 | 異常大額交易的程度 |
+
 ---
 
 ## 5. Step 3：特徵篩選
@@ -208,8 +236,8 @@ user_info (63,770 users)
 
 ### 5.4 預期結果
 
-- 原始提取約 **50-60 個特徵**
-- 篩選後預估保留 **30-40 個**
+- 原始提取約 **60-70 個特徵**（含新增圖特徵與時序速度特徵）
+- 篩選後預估保留 **35-45 個**
 
 ---
 
@@ -219,18 +247,26 @@ user_info (63,770 users)
 
 | 方法 | 說明 | 優先級 |
 |------|------|--------|
-| **class_weight='balanced'** | 模型內建加權，不改變資料量 | 首選 |
-| **SMOTE** | 對少數類生成合成樣本 | 備選 |
-| **閾值調整** | 不改資料，調整分類閾值 | 必做 |
+| **class_weight='balanced'** | 模型內建加權，不改變資料量 | P1 首選 |
+| **Focal Loss** | 針對難分樣本加權，讓模型專注邊界樣本（文獻：在 30:1 極端不平衡下比 SMOTE 更穩定） | P2 建議 |
+| **閾值調整** | 不改資料，調整分類閾值 | P1 必做 |
+| **SMOTE / ADASYN** | 對少數類生成合成樣本（注意：必須只在訓練集上做，避免資料洩漏） | P3 備選 |
 | Undersampling | 減少多數類 | 不建議（會丟失資訊） |
+
+> **Focal Loss 實作方式**：XGBoost 支援自定義損失函數，設定 γ=0.5~2.0，α 依不平衡比設定。Focal Loss 不改變資料分佈，直接整合進模型訓練，風險低於 SMOTE。
 
 ### 6.2 閾值選擇策略
 
+> **關鍵**：官方持有 predict_label 的真實答案，會直接用繳交的硬標籤（0/1）算 F1。閾值選擇直接決定最終分數。
+
 官方 Live Demo 要求說明「選了什麼 threshold、為什麼選這個值」：
 
-- 基於 **Precision-Recall Curve** 找最佳 F1 對應的閾值
-- 也可依業務考量調整（寧可誤判也不漏抓 → 降低閾值提高 Recall）
+- 基於 **Precision-Recall Curve** 找最大化 `F1(class=1)` 對應的閾值
+- 使用 **5-Fold CV 的平均最佳閾值**，而非單一 fold 的閾值，提高穩健性
+- 觀察 **predict_label 的機率分佈**是否與 train set 一致，若偏移則需微調閾值
+- 檢查最佳閾值 ±0.05 範圍內的 F1 變化幅度（若過於陡峭，代表閾值敏感，風險高）
 - 最終報告需呈現不同閾值下的 Precision / Recall / F1 trade-off 圖表
+- 簡報同時呈現 `F1(class=1)` 和 `macro-F1`，確保覆蓋官方可能的評分方式
 
 ---
 
@@ -238,14 +274,15 @@ user_info (63,770 users)
 
 ### 7.1 模型選擇
 
-| 模型 | 選用原因 | SHAP Explainer |
-|------|----------|----------------|
-| **XGBoost** | 表格資料 SOTA，處理不平衡佳 | TreeExplainer |
-| **LightGBM** | 速度快，大數據友好 | TreeExplainer |
-| **Random Forest** | 穩定基線模型 | TreeExplainer |
-| Logistic Regression | 線性基線，可解釋性強 | LinearExplainer |
+| 模型 | 選用原因 | SHAP Explainer | 角色 |
+|------|----------|----------------|------|
+| **XGBoost** | 表格資料 SOTA，處理不平衡佳 | TreeExplainer | 主力 |
+| **LightGBM** | 速度快，大數據友好 | TreeExplainer | 主力 |
+| **CatBoost** | 對 `career`（31 類）、`income_source`（10 類）等高基數類別特徵有原生支持，免手動 encoding | TreeExplainer | 主力 |
+| Random Forest | 穩定基線模型 | TreeExplainer | 基線對照 |
+| Logistic Regression | 線性基線，可解釋性強 | LinearExplainer | 基線對照 |
 
-> 建議以 **XGBoost 或 LightGBM 為主模型**，RF 和 LR 作為對照基線。
+> **Ensemble 策略**：以 **XGBoost + LightGBM + CatBoost** 三模型 Ensemble（Soft Voting 或 Stacking），RF 和 LR 作為對照基線。文獻支持：Kaggle IEEE-CIS Fraud Detection 第一名即採用此三模型 Ensemble。
 
 ### 7.2 訓練/驗證切分
 
@@ -265,7 +302,8 @@ predict_label (12,753 users) → 最終預測繳交
 
 | 指標 | 說明 | 重要性 |
 |------|------|--------|
-| **F1-score** | Precision 與 Recall 的調和平均 | 官方主要依據 |
+| **F1-score (class=1)** | 黑名單類別的 Precision 與 Recall 調和平均 | **官方主要依據（推定）** |
+| **macro-F1** | 兩類 F1 的平均 | 附帶呈現，覆蓋官方可能的評分方式 |
 | Precision | 預測為黑名單中，真正是黑名單的比例 | 低誤判率 |
 | Recall | 實際黑名單被成功識別的比例 | 捕捉率 |
 | FPR | 正常用戶被誤判為黑名單的比例 | 官方強調低誤判 |
@@ -292,8 +330,22 @@ predict_label (12,753 users) → 最終預測繳交
 | **Waterfall Plot** | 單一用戶的風險貢獻拆解 | Live Demo：「這個用戶為什麼是黑名單」 |
 | **Force Plot** | 單一用戶推力圖 | 同上，另一種直觀呈現 |
 | **Dependence Plot** | 單一特徵值與 SHAP 值的關係 | 解釋特徵閾值效果 |
+| **Interaction Plot** | 兩特徵交互作用對 SHAP 值的影響 | 展示組合風險因子（如 `age × income_source`） |
 
-### 8.3 自然語言風險報告
+### 8.3 SHAP 交互作用分析
+
+> 補充單特徵層面以外的解釋深度，強化「風險說明能力」（佔 30%）。
+
+利用 `shap.TreeExplainer` 的 `shap_interaction_values` 計算特徵間交互作用，重點關注：
+
+| 交互組合 | 業務意義 |
+|----------|----------|
+| `age` × `income_source` | 年輕 + 無固定收入 = 高風險組合 |
+| `night_tx_ratio` × `twd_out_in_ratio` | 深夜 + 快進快出 = 異常行為疊加 |
+| `account_age_days` × `total_volume_twd` | 新帳戶 + 大額交易 = 人頭戶典型模式 |
+| `kyc2_speed_days` × `deposit_to_withdraw_speed` | 快速完成 KYC 後立即大額交易 |
+
+### 8.4 自然語言風險報告
 
 官方範例要求能產生類似以下說明：
 
@@ -374,9 +426,19 @@ SSR = 穩定用戶數 / 總測試用戶數
 |------|------|
 | SSR_top1 / SSR_top3 / SSR_top5 | 各 k 值下的穩定樣本比例 |
 | 擾動衰減曲線 | SSR 隨 ε 增大的下降趨勢圖 |
-| 模型間比較 | 各模型（XGBoost/LightGBM/RF/LR）的 SSR 對比 |
+| 模型間比較 | 各模型（XGBoost/LightGBM/CatBoost/RF/LR）的 SSR 對比 |
+| **分群 SSR 報告** | 分別報告黑名單用戶 vs 正常用戶的 SSR |
 
-> **簡報論述**：「我們的 SHAP 解釋不僅有業務意義，且經過穩定性驗證 — SSR_top1 達到 X%，代表 X% 的用戶在資料微小波動下，首要風險因子保持不變，解釋具備可信度。」
+### 9.7 SSR 分群分析（原創貢獻）
+
+> 文獻指出少數類（黑名單）在決策邊界附近比例更高，SHAP 值對特徵微小變化更敏感。分群報告填補現有文獻空白，具創新性。
+
+| 分群 | 預期 SSR 表現 | 業務意義 |
+|------|-------------|----------|
+| 正常用戶（class=0） | 較高 | 正常用戶的風險因子解釋穩定，可信度高 |
+| 黑名單用戶（class=1） | 較低 | 黑名單用戶在決策邊界附近，解釋較敏感 |
+
+> **簡報論述**：「我們的 SHAP 解釋不僅有業務意義，且經過穩定性驗證 — SSR_top1 達到 X%，代表 X% 的用戶在資料微小波動下，首要風險因子保持不變，解釋具備可信度。此外，我們分別分析了黑名單與正常用戶的穩定性差異，發現 [具體結論]，這在現有文獻中尚屬首次。」
 
 ---
 
@@ -436,7 +498,9 @@ Bio_AWS_Workshop/
 │   └── data.md                       # 官方資料集說明
 │
 ├── docs/                             # 專案文件
-│   └── project_plan.md               # 本企劃書
+│   ├── project_plan.md               # 本企劃書
+│   └── research/
+│       └── aml-model-literature-review.md  # 文獻調研報告
 │
 ├── notebooks/                        # Jupyter Notebooks
 │   ├── 01_data_cleaning.ipynb        # Step 1：資料整理
