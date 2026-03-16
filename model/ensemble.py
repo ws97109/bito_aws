@@ -27,14 +27,14 @@ warnings.filterwarnings("ignore")
 
 def build_xgboost(scale_pos_weight: float = 50.0) -> xgb.XGBClassifier:
     return xgb.XGBClassifier(
-        n_estimators=1500,
+        n_estimators=1800,
         max_depth=5,
-        learning_rate=0.01,
-        subsample=0.7,
-        colsample_bytree=0.6,
-        min_child_weight=3,
-        reg_alpha=0.5,
-        reg_lambda=2.0,
+        learning_rate=0.006,
+        subsample=0.62,
+        colsample_bytree=0.57,
+        min_child_weight=36,
+        reg_alpha=0.47,
+        reg_lambda=0.02,
         scale_pos_weight=scale_pos_weight,
         eval_metric="aucpr",
         tree_method="hist",
@@ -50,14 +50,15 @@ def build_xgboost(scale_pos_weight: float = 50.0) -> xgb.XGBClassifier:
 
 def build_lightgbm(scale_pos_weight: float = 50.0) -> LGBMClassifier:
     return LGBMClassifier(
-        n_estimators=1500,
+        n_estimators=1800,
         max_depth=5,
-        learning_rate=0.01,
-        subsample=0.7,
-        colsample_bytree=0.6,
-        min_child_samples=10,
-        reg_alpha=0.5,
-        reg_lambda=2.0,
+        learning_rate=0.006,
+        subsample=0.62,
+        colsample_bytree=0.57,
+        min_child_samples=36,
+        reg_alpha=0.47,
+        reg_lambda=0.02,
+        num_leaves=114,
         scale_pos_weight=scale_pos_weight,
         random_state=42,
         verbose=-1,
@@ -70,10 +71,10 @@ def build_lightgbm(scale_pos_weight: float = 50.0) -> LGBMClassifier:
 
 def build_catboost(scale_pos_weight: float = 50.0) -> CatBoostClassifier:
     return CatBoostClassifier(
-        iterations=1500,
+        iterations=1800,
         depth=5,
-        learning_rate=0.01,
-        l2_leaf_reg=2.0,
+        learning_rate=0.006,
+        l2_leaf_reg=0.47,
         scale_pos_weight=scale_pos_weight,
         eval_metric="PRAUC",
         random_seed=42,
