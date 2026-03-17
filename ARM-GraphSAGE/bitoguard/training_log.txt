@@ -1,0 +1,58 @@
+Using device: cpu
+
+Loading heterogeneous graph...
+Graph loaded:
+  User nodes: 63770
+  Wallet nodes: 1004
+  Edge types: [('user', 'sends_to', 'wallet'), ('wallet', 'receives_from', 'user'), ('user', 'transacts_with', 'user')]
+
+CATE scores loaded
+
+Initializing BitoGuardGNN model...
+
+
+================================================================================
+MODEL SUMMARY
+================================================================================
+BitoGuardClassifier(
+  (gnn): BitoGuardGNN(
+    (input_projs): ModuleDict(
+      (user): Linear(34, 128, bias=True)
+      (wallet): Linear(100, 128, bias=True)
+    )
+    (conv1): HeteroConv(num_relations=3)
+    (conv2): HeteroConv(num_relations=3)
+    (cf_gate): Linear(in_features=1, out_features=128, bias=True)
+    (output_proj): Linear(in_features=128, out_features=64, bias=True)
+    (dropout_layer): Dropout(p=0.3, inplace=False)
+  )
+  (classifier): Linear(in_features=64, out_features=1, bias=True)
+  (loss_fn): FocalLoss()
+)
+================================================================================
+Total parameters: 822,017
+Trainable parameters: 822,017
+================================================================================
+
+Starting training...
+
+================================================================================
+Epoch 1/100
+  Train Loss: 312510059.5000
+  Val PR-AUC: 0.4870
+  Val ROC-AUC: 0.4990
+  Val F1: 0.0021
+Epoch 10/100
+  Train Loss: 189645160.9034
+  Val PR-AUC: 0.4882
+  Val ROC-AUC: 0.5007
+  Val F1: 0.0000
+
+Early stopping at epoch 16
+================================================================================
+
+Training complete!
+Best validation PR-AUC: 0.4893
+
+Generating final embeddings...
+Embeddings saved to: results/features/gnn_embeddings.npy
