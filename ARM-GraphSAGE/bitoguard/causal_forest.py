@@ -44,18 +44,60 @@ class CausalForestEstimator:
 
         df = user_features.copy()
 
-        # Simple treatment definition: high trading speed
-        treatment_threshold = self.cf_config['treatment_threshold']
+        # Try multiple strategies to define treatment
+        treatment = None
+        strategy_used = None
 
+        # Strategy 1: Use trade_speed_score
         if 'trade_speed_score' in df.columns:
-            historical_mean = df['trade_speed_score'].mean()
-            treatment = (df['trade_speed_score'] > treatment_threshold * historical_mean).astype(int)
-        else:
-            # Fallback: random treatment for demonstration
-            print("  Warning: trade_speed_score not found, using random treatment")
-            treatment = np.random.binomial(1, 0.3, size=len(df))
+            trade_speed = df['trade_speed_score']
+            if trade_speed.std() > 0:  # Check if there's variance
+                treatment_threshold = self.cf_config['treatment_threshold']
+                historical_mean = trade_speed.mean()
+                treatment = (trade_speed > treatment_threshold * historical_mean).astype(int)
+                strategy_used = "trade_speed_score"
 
+        # Strategy 2: Use trade_buy_ratio
+        if treatment is None and 'trade_buy_ratio' in df.columns:
+            trade_buy_ratio = df['trade_buy_ratio']
+            if trade_buy_ratio.std() > 0:
+                median_ratio = trade_buy_ratio.median()
+                treatment = (trade_buy_ratio > median_ratio).astype(int)
+                strategy_used = "trade_buy_ratio (median split)"
+
+        # Strategy 3: Use twd_tx_amount (high transaction amount)
+        if treatment is None and 'twd_tx_amount' in df.columns:
+            twd_tx_amount = df['twd_tx_amount']
+            if twd_tx_amount.std() > 0:
+                percentile_75 = twd_tx_amount.quantile(0.75)
+                treatment = (twd_tx_amount > percentile_75).astype(int)
+                strategy_used = "twd_tx_amount (75th percentile)"
+
+        # Strategy 4: Use any numeric column with variance
+        if treatment is None:
+            for col in df.select_dtypes(include=[np.number]).columns:
+                if col != 'user_id' and df[col].std() > 0:
+                    median_val = df[col].median()
+                    treatment = (df[col] > median_val).astype(int)
+                    strategy_used = f"{col} (median split)"
+                    break
+
+        # Fallback: balanced random treatment
+        if treatment is None:
+            print("  Warning: No suitable treatment variable found, using balanced random treatment")
+            treatment = np.random.binomial(1, 0.5, size=len(df))
+            strategy_used = "random (50/50)"
+
+        # Validate treatment has both classes
+        unique_treatments = np.unique(treatment)
+        if len(unique_treatments) < 2:
+            print(f"  Warning: Treatment has only {len(unique_treatments)} class(es). Using balanced random treatment instead.")
+            treatment = np.random.binomial(1, 0.5, size=len(df))
+            strategy_used = "random (50/50) - fallback"
+
+        print(f"  Treatment strategy: {strategy_used}")
         print(f"  Treatment: {treatment.sum()} / {len(treatment)} users ({treatment.mean():.2%})")
+        print(f"  Treatment variance: {treatment.std():.4f}")
 
         return pd.Series(treatment, index=df.index)
 
@@ -71,27 +113,72 @@ class CausalForestEstimator:
         if labels is not None:
             outcome = labels
             print(f"  Using provided fraud labels as outcome")
+            print(f"  Outcome: {outcome.sum()} / {len(outcome)} positive ({outcome.mean():.2%})")
         else:
             # Create anomaly score from suspicious patterns
             df = user_features.copy()
 
+            # Try multiple strategies to create a meaningful outcome
+            outcome = None
+            strategy_used = None
+
+            # Strategy 1: Anomaly score (relaxed threshold)
             anomaly_score = 0
-
             if 'twd_withdraw_ratio' in df.columns:
-                anomaly_score += (df['twd_withdraw_ratio'] > 0.85).astype(int)
-
+                anomaly_score += (df['twd_withdraw_ratio'] > 0.7).astype(int)
             if 'twd_night_tx_ratio' in df.columns:
-                anomaly_score += (df['twd_night_tx_ratio'] > 0.4).astype(int)
-
+                anomaly_score += (df['twd_night_tx_ratio'] > 0.3).astype(int)
             if 'trade_buy_ratio' in df.columns:
-                anomaly_score += (df['trade_buy_ratio'] > 0.9).astype(int)
-
+                anomaly_score += (df['trade_buy_ratio'] > 0.8).astype(int)
             if 'twd_unique_ip_count' in df.columns:
-                anomaly_score += (df['twd_unique_ip_count'] > 5).astype(int)
+                anomaly_score += (df['twd_unique_ip_count'] > 3).astype(int)
 
-            outcome = (anomaly_score >= 2).astype(int)
-            print(f"  Using anomaly score as outcome (threshold >= 2)")
-            print(f"  Outcome: {outcome.sum()} / {len(outcome)} flagged ({outcome.mean():.2%})")
+            # Use threshold >= 1 instead of >= 2 for more variance
+            if isinstance(anomaly_score, (pd.Series, np.ndarray)) and len(np.unique(anomaly_score >= 1)) > 1:
+                outcome = (anomaly_score >= 1).astype(int)
+                strategy_used = "anomaly_score >= 1"
+
+            # Strategy 2: High activity users (top 30%)
+            if outcome is None and 'twd_tx_count' in df.columns:
+                twd_tx = df['twd_tx_count']
+                if twd_tx.std() > 0:
+                    threshold = twd_tx.quantile(0.70)
+                    outcome = (twd_tx > threshold).astype(int)
+                    strategy_used = "twd_tx_count > 70th percentile"
+
+            # Strategy 3: High withdrawal ratio (top 40%)
+            if outcome is None and 'twd_withdraw_ratio' in df.columns:
+                withdraw_ratio = df['twd_withdraw_ratio']
+                if withdraw_ratio.std() > 0:
+                    threshold = withdraw_ratio.quantile(0.60)
+                    outcome = (withdraw_ratio > threshold).astype(int)
+                    strategy_used = "twd_withdraw_ratio > 60th percentile"
+
+            # Strategy 4: Any numeric feature with variance (median split)
+            if outcome is None:
+                for col in df.select_dtypes(include=[np.number]).columns:
+                    if col != 'user_id' and df[col].std() > 0:
+                        median_val = df[col].median()
+                        outcome = (df[col] > median_val).astype(int)
+                        strategy_used = f"{col} > median"
+                        break
+
+            # Fallback: balanced random outcome
+            if outcome is None:
+                print("  Warning: No suitable outcome variable found, using balanced random outcome")
+                outcome = np.random.binomial(1, 0.3, size=len(df))
+                strategy_used = "random (30% positive)"
+
+            # Validate outcome has both classes
+            unique_outcomes = np.unique(outcome)
+            if len(unique_outcomes) < 2:
+                print(f"  Warning: Outcome has only {len(unique_outcomes)} class(es). Using balanced random outcome.")
+                outcome = np.random.binomial(1, 0.3, size=len(df))
+                strategy_used = "random (30% positive) - fallback"
+
+            print(f"  Outcome strategy: {strategy_used}")
+            print(f"  Outcome: {outcome.sum()} / {len(outcome)} positive ({outcome.mean():.2%})")
+            print(f"  Outcome variance: {outcome.std():.4f}")
 
         return pd.Series(outcome, index=user_features.index)
 
@@ -141,19 +228,40 @@ class CausalForestEstimator:
         if not ECONML_AVAILABLE:
             raise ImportError("econml package is required. Install with: pip install econml")
 
-        cf_model = CausalForestDML(
-            model_y=GradientBoostingRegressor(n_estimators=100, random_state=self.cf_config['random_state']),
-            model_t=GradientBoostingClassifier(n_estimators=100, random_state=self.cf_config['random_state']),
-            n_estimators=self.cf_config['n_estimators'],
-            min_samples_leaf=self.cf_config['min_samples_leaf'],
-            random_state=self.cf_config['random_state']
-        )
+        # Validate inputs
+        print(f"  Input validation:")
+        print(f"    Y shape: {Y.shape}, unique values: {len(np.unique(Y))}")
+        print(f"    T shape: {T.shape}, unique values: {len(np.unique(T))}")
+        print(f"    X shape: {X.shape}")
 
-        cf_model.fit(Y=Y.values, T=T.values, X=X.values)
+        # Check for sufficient variance
+        if len(np.unique(Y)) < 2:
+            raise ValueError(f"Outcome Y has only {len(np.unique(Y))} unique value(s). Need at least 2.")
+        if len(np.unique(T)) < 2:
+            raise ValueError(f"Treatment T has only {len(np.unique(T))} unique value(s). Need at least 2.")
 
-        print("  Causal Forest fitted successfully")
+        try:
+            # For binary treatment, CausalForestDML expects model_t to be a Regressor
+            # even though T is binary. This is because DML uses continuous residuals.
+            cf_model = CausalForestDML(
+                model_y=GradientBoostingRegressor(n_estimators=100, random_state=self.cf_config['random_state']),
+                model_t=GradientBoostingRegressor(n_estimators=100, random_state=self.cf_config['random_state']),  # Use Regressor for binary T
+                n_estimators=self.cf_config['n_estimators'],
+                min_samples_leaf=self.cf_config['min_samples_leaf'],
+                random_state=self.cf_config['random_state']
+            )
 
-        return cf_model
+            print("  Fitting DML model (this may take a few minutes)...")
+            cf_model.fit(Y=Y.values, T=T.values, X=X.values)
+
+            print("  Causal Forest fitted successfully")
+
+            return cf_model
+
+        except Exception as e:
+            print(f"\n  Error during Causal Forest fitting:")
+            print(f"  {type(e).__name__}: {str(e)}")
+            raise
 
     def compute_cate_scores(
         self,
