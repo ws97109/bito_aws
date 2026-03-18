@@ -42,6 +42,10 @@ def build_user_features(user_info: pd.DataFrame) -> pd.DataFrame:
     # 年齡（資料中已是數值欄位）
     df["age"] = pd.to_numeric(df["age"], errors="coerce").clip(lower=0, upper=120)
 
+    # 性別（強信號：黑名單中女性佔比遠高於正常用戶）
+    df["sex"] = pd.to_numeric(df["sex"], errors="coerce").fillna(0).astype(int)
+    df["is_female"] = (df["sex"] == 2).astype(int)
+
     # 高風險職業 / 收入來源
     df["is_high_risk_career"] = df["career"].isin(HIGH_RISK_CAREERS).astype(int)
     df["is_high_risk_income"] = df["income_source"].isin(HIGH_RISK_INCOME).astype(int)
@@ -51,14 +55,35 @@ def build_user_features(user_info: pd.DataFrame) -> pd.DataFrame:
         df["is_high_risk_career"] & df["is_high_risk_income"]
     ).astype(int)
 
+    # 職業群組（target encoding 用不了，改用 frequency-based: 低頻職業更可疑）
+    career_counts = df["career"].value_counts()
+    df["career_freq"] = df["career"].map(career_counts).fillna(0)
+
     # 來源管道
     df["is_app_user"] = (df["user_source"] == 1).astype(int)
+
+    # 註冊時間特徵（晚間註冊可能是機器人/代辦）
+    df["reg_hour"] = df["confirmed_at"].dt.hour
+    df["reg_is_night"] = df["reg_hour"].between(0, 5).astype(int)
+    df["reg_is_weekend"] = df["confirmed_at"].dt.dayofweek.isin([5, 6]).astype(int)
+
+    # KYC Level 1 到 Level 2 之間的天數
+    df["kyc_gap_days"] = (
+        df["level2_finished_at"] - df["level1_finished_at"]
+    ).dt.days.clip(lower=0)
+
+    # 註冊到第一次 KYC 的天數（快速完成 KYC 可疑）
+    df["reg_to_kyc1_days"] = (
+        df["level1_finished_at"] - df["confirmed_at"]
+    ).dt.days.clip(lower=0)
 
     feature_cols = [
         "user_id",
         "has_kyc_level2", "kyc_speed_sec", "account_age_days",
-        "age", "is_high_risk_career", "is_high_risk_income",
-        "career_income_risk", "is_app_user",
+        "age", "is_female", "is_high_risk_career", "is_high_risk_income",
+        "career_income_risk", "career_freq", "is_app_user",
+        "reg_hour", "reg_is_night", "reg_is_weekend",
+        "kyc_gap_days", "reg_to_kyc1_days",
     ]
     return df[feature_cols].set_index("user_id")
 
@@ -584,7 +609,106 @@ def build_red_flag_features(
 
 
 # ─────────────────────────────────────────────
-# 10. 整合所有特徵
+# 10. 交易時序特徵（transaction interval & burst）
+# ─────────────────────────────────────────────
+
+def build_temporal_features(
+    twd: pd.DataFrame,
+    crypto: pd.DataFrame,
+    trading: pd.DataFrame,
+    swap: pd.DataFrame,
+    user_info: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    時序模式特徵：
+    - tx_interval_mean/std/min: 交易間隔統計（快速連續交易是紅旗）
+    - tx_burst_count: 1 小時內 >= 5 筆交易的「爆發」次數
+    - amount_p90/p10_ratio: 金額 90% vs 10% 分位比（均勻金額 = Smurfing）
+    - active_days: 有交易的天數
+    - active_day_ratio: 有交易天數 / 帳號年齡天數
+    """
+    all_user_ids = user_info["user_id"].unique()
+
+    # 收集所有交易時間和金額
+    frames = []
+    for df, ts_col in [
+        (twd, "created_at"), (crypto, "created_at"),
+        (trading, "updated_at"), (swap, "created_at"),
+    ]:
+        tmp = df[["user_id"]].copy()
+        tmp["ts"] = pd.to_datetime(df[ts_col])
+        amt_col = None
+        if "ori_samount" in df.columns:
+            amt_col = "ori_samount"
+        elif "trade_samount" in df.columns:
+            amt_col = "trade_samount"
+        elif "twd_samount" in df.columns:
+            amt_col = "twd_samount"
+        if amt_col:
+            tmp["amount"] = pd.to_numeric(df[amt_col], errors="coerce") * SCALE
+        else:
+            tmp["amount"] = 0
+        frames.append(tmp[["user_id", "ts", "amount"]])
+
+    all_tx = pd.concat(frames, ignore_index=True).dropna(subset=["ts"])
+    all_tx = all_tx.sort_values(["user_id", "ts"])
+
+    # 交易間隔統計
+    all_tx["prev_ts"] = all_tx.groupby("user_id")["ts"].shift(1)
+    all_tx["interval_sec"] = (all_tx["ts"] - all_tx["prev_ts"]).dt.total_seconds()
+
+    interval_stats = all_tx.groupby("user_id")["interval_sec"].agg(
+        tx_interval_mean="mean",
+        tx_interval_std="std",
+        tx_interval_min="min",
+        tx_interval_median="median",
+    ).fillna(0)
+
+    # 爆發偵測：1 小時滾動窗口內 >= 5 筆
+    def count_bursts(grp):
+        if len(grp) < 5:
+            return 0
+        ts_vals = grp["ts"].values
+        count = 0
+        for i in range(len(ts_vals)):
+            window_end = ts_vals[i] + np.timedelta64(1, "h")
+            n_in_window = np.searchsorted(ts_vals, window_end, side="right") - i
+            if n_in_window >= 5:
+                count += 1
+        return count
+
+    burst_counts = all_tx.groupby("user_id").apply(count_bursts).rename("tx_burst_count")
+
+    # 金額分位數比（偵測金額是否過於均勻）
+    def p90_p10_ratio(x):
+        p90 = x.quantile(0.9)
+        p10 = x.quantile(0.1)
+        return p90 / (p10 + 1e-9)
+
+    amount_ratio = (
+        all_tx[all_tx["amount"] > 0]
+        .groupby("user_id")["amount"]
+        .apply(p90_p10_ratio)
+        .clip(upper=1000)
+        .rename("amount_p90_p10_ratio")
+    )
+
+    # 活躍天數
+    all_tx["date"] = all_tx["ts"].dt.date
+    active_days = all_tx.groupby("user_id")["date"].nunique().rename("active_days")
+
+    feat = pd.DataFrame(index=pd.Index(all_user_ids, name="user_id"))
+    feat = feat.join(interval_stats)
+    feat = feat.join(burst_counts)
+    feat = feat.join(amount_ratio)
+    feat = feat.join(active_days)
+    feat = feat.fillna(0)
+
+    return feat
+
+
+# ─────────────────────────────────────────────
+# 11. 整合所有特徵
 # ─────────────────────────────────────────────
 
 def build_all_features(
@@ -603,17 +727,19 @@ def build_all_features(
     f_graph   = build_graph_features(crypto, user_info)
     f_cross   = build_cross_table_features(twd, crypto, trading, swap)
     f_red     = build_red_flag_features(twd, crypto, user_info)
+    f_temporal = build_temporal_features(twd, crypto, trading, swap, user_info)
 
     feat = (
         f_user
-        .join(f_twd,     how="left")
-        .join(f_crypto,  how="left")
-        .join(f_trading, how="left")
-        .join(f_ip,      how="left")
-        .join(f_vel,     how="left")
-        .join(f_graph,   how="left")
-        .join(f_cross,   how="left")
-        .join(f_red,     how="left")
+        .join(f_twd,      how="left")
+        .join(f_crypto,   how="left")
+        .join(f_trading,  how="left")
+        .join(f_ip,       how="left")
+        .join(f_vel,      how="left")
+        .join(f_graph,    how="left")
+        .join(f_cross,    how="left")
+        .join(f_red,      how="left")
+        .join(f_temporal, how="left")
     ).fillna(0)
 
     # 複合風險分數（手工特徵交叉）

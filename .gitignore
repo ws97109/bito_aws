@@ -21,3 +21,10 @@ venv/
 .env
 
 plot/
+
+# CatBoost temp
+catboost_info/
+model/catboost_info/
+
+# Model output (large files)
+output/

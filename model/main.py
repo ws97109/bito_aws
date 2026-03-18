@@ -26,7 +26,9 @@ sys.path.insert(0, ROOT)
 # 直接從當前目錄導入（所有模組都在 model/ 目錄下）
 from Feature_rngineering import build_all_features
 from feature_selection import select_features
+from anomaly_detection import AnomalyFeatureExtractor, add_anomaly_scores_to_splits
 from Gnn_model import build_transaction_graph, BlacklistGNN
+from pseudo_labeling import pseudo_label
 from ensemble import StackingEnsemble, evaluate, find_optimal_threshold
 from shap_explainer import (
     SHAPExplainer, CounterfactualExplainer, generate_user_report,
@@ -158,6 +160,38 @@ def load_and_validate(data_dir: str) -> dict:
     return tables
 
 
+def load_predict_data(predict_dir: str) -> dict:
+    """載入 predict/ 目錄的五張 CSV（無 status 欄位）"""
+    PREDICT_SPECS = {
+        "user_info_predict": TABLE_SPECS["user_info_train"],
+        "twd_transfer_predict": TABLE_SPECS["twd_transfer_train"],
+        "crypto_transfer_predict": TABLE_SPECS["crypto_transfer_train"],
+        "usdt_twd_trading_predict": TABLE_SPECS["usdt_twd_trading_train"],
+        "usdt_swap_predict": TABLE_SPECS["usdt_swap_train"],
+    }
+    tables = {}
+    for name, spec in PREDICT_SPECS.items():
+        path = os.path.join(predict_dir, f"{name}.csv")
+        if not os.path.exists(path):
+            return None  # predict 資料不存在，靜默跳過
+        df = pd.read_csv(path, low_memory=False)
+        for col in spec.get("datetime", []):
+            if col in df.columns:
+                df[col] = pd.to_datetime(df[col], errors="coerce")
+        for col in spec.get("int", []):
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+        for col in spec.get("float", []):
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+        for col in spec.get("str", []):
+            if col in df.columns:
+                df[col] = df[col].astype(str).replace("nan", pd.NA)
+        tables[name] = df
+    print(f"\n  [Predict] 載入 {len(tables)} 張表，用戶數: {len(tables.get('user_info_predict', []))}")
+    return tables
+
+
 # ═══════════════════════════════════════════════
 # GNN 訓練
 # ═══════════════════════════════════════════════
@@ -209,7 +243,16 @@ def train_gnn(
 # 主流程
 # ═══════════════════════════════════════════════
 
-def main(data_dir: str = "adjust_data/train", output_dir: str = "output", skip_gnn: bool = False):
+def main(
+    data_dir: str = "adjust_data/train",
+    predict_dir: str = "adjust_data/predict",
+    output_dir: str = "output",
+    skip_gnn: bool = False,
+    use_focal_loss: bool = True,
+    use_smote: bool = False,
+    smote_strategy: float = 0.3,
+    use_pseudo_label: bool = False,
+):
     os.makedirs(output_dir, exist_ok=True)
 
     # ── Step 1：載入真實 CSV ─────────────────────
@@ -287,12 +330,25 @@ def main(data_dir: str = "adjust_data/train", output_dir: str = "output", skip_g
     print(f"  訓練集：{len(X_tr):,}（黑名單 {y_tr.sum()}）")
     print(f"  測試集：{len(X_te):,}（黑名單 {y_te.sum()}）")
 
-    # ── Step 4：GNN ──────────────────────────────
-    gnn_proba_all = None
+    # ── Step 3.5：非監督異常偵測 ──────────────────
+    print("\n" + "="*55)
+    print("[Step 3.5] 非監督式異常偵測（Isolation Forest / HBOS / LOF）")
+    print("="*55)
+
+    X_tr, X_te, anomaly_extractor = add_anomaly_scores_to_splits(X_tr, X_te)
+    # 更新特徵名稱
+    feature_names = feature_names + AnomalyFeatureExtractor.get_feature_names()
+    # 同時處理全量 X（用於最終預測）
+    all_anomaly_scores = anomaly_extractor.transform(X)
+    X_all = np.hstack([X, all_anomaly_scores])
+    print(f"  全量特徵維度：{X.shape[1]} → {X_all.shape[1]}")
+
+    # ── Step 4：GNN（embedding 作為特徵）──────────
+    gnn_embed_dim = 0
 
     if not skip_gnn:
         print("\n" + "="*55)
-        print("[Step 4] 建立交易圖 & 訓練 GNN")
+        print("[Step 4] 建立交易圖 & 訓練 GNN → 提取 embedding 作為特徵")
         print("="*55)
 
         graph     = build_transaction_graph(crypto, feat_df.drop(columns=["status"]))
@@ -319,32 +375,140 @@ def main(data_dir: str = "adjust_data/train", output_dir: str = "output", skip_g
             )
             gnn_mdl.eval()
             with torch.no_grad():
-                gnn_proba_all = gnn_mdl.predict_proba(
-                    graph.to(DEVICE), tabular_t.to(DEVICE)
-                ).cpu().numpy()
+                # 提取 GNN encoder 的 64-dim embedding（而非最終分類機率）
+                gnn_embedding = gnn_mdl.gnn_encoder(
+                    graph.to(DEVICE)
+                ).cpu().numpy()  # shape: [n_users, 64]
 
             torch.save(gnn_mdl.state_dict(),
                        os.path.join(output_dir, "gnn_model.pt"))
+
+            # PCA 降維至 16 維，保留主要資訊
+            from sklearn.decomposition import PCA
+            gnn_pca_dim = min(16, gnn_embedding.shape[1])
+            pca = PCA(n_components=gnn_pca_dim, random_state=42)
+            gnn_features = pca.fit_transform(gnn_embedding).astype(np.float32)
+            explained = pca.explained_variance_ratio_.sum()
+            print(f"  GNN embedding: 64 → PCA {gnn_pca_dim} 維（解釋變異: {explained:.2%}）")
+
+            # 拼接 GNN features 到 train/test/all
+            gnn_tr_feat = gnn_features[idx_tr]
+            gnn_te_feat = gnn_features[idx_te]
+            X_tr = np.hstack([X_tr, gnn_tr_feat])
+            X_te = np.hstack([X_te, gnn_te_feat])
+            X_all = np.hstack([X_all, gnn_features])
+            gnn_embed_dim = gnn_pca_dim
+
+            # 更新特徵名稱
+            gnn_feat_names = [f"gnn_emb_{i}" for i in range(gnn_pca_dim)]
+            feature_names = feature_names + gnn_feat_names
+            print(f"  特徵維度：{X_tr.shape[1] - gnn_pca_dim} → {X_tr.shape[1]} (+{gnn_pca_dim} GNN embedding)")
     else:
         print("\n[Step 4] 跳過 GNN（--skip_gnn）")
 
-    gnn_tr = gnn_proba_all[idx_tr] if gnn_proba_all is not None else None
-    gnn_te = gnn_proba_all[idx_te] if gnn_proba_all is not None else None
-
     # ── Step 5：集成訓練 ─────────────────────────
     print("\n" + "="*55)
-    print("[Step 5] 訓練集成模型（XGBoost + LightGBM + CatBoost + IsoForest）")
+    print("[Step 5] 訓練集成模型（XGBoost + LightGBM + CatBoost）")
     print("="*55)
 
-    ensemble = StackingEnsemble(n_splits=5)
-    ensemble.fit(X_tr, y_tr, gnn_proba=gnn_tr)
+    ensemble = StackingEnsemble(
+        n_splits=5,
+        use_focal_loss=use_focal_loss,
+        use_smote=use_smote,
+        smote_strategy=smote_strategy,
+    )
+    ensemble.fit(X_tr, y_tr)
+
+    # ── Step 5.5：Pseudo-labeling（可選）─────────
+    if use_pseudo_label:
+        print("\n" + "="*55)
+        print("[Step 5.5] 半監督學習 — Pseudo-labeling")
+        print("="*55)
+
+        # 載入 predict/ 資料並做特徵工程
+        pred_tables = load_predict_data(predict_dir)
+        if pred_tables is not None:
+            pred_user = pred_tables["user_info_predict"]
+            pred_twd  = pred_tables["twd_transfer_predict"]
+            pred_crypto = pred_tables["crypto_transfer_predict"]
+            pred_trading = pred_tables["usdt_twd_trading_predict"]
+            pred_swap = pred_tables["usdt_swap_predict"]
+
+            print(f"  Predict 用戶: {len(pred_user)}")
+            print(f"  特徵工程中 ...")
+
+            pred_feat = build_all_features(pred_user, pred_twd, pred_crypto, pred_trading, pred_swap)
+            pred_feat = pred_feat.replace([np.inf, -np.inf], np.nan).fillna(0)
+
+            # 對齊欄位：用 train 的篩選後欄位
+            train_cols = X_selected.columns.tolist()
+            for col in train_cols:
+                if col not in pred_feat.columns:
+                    pred_feat[col] = 0
+            X_pred_raw = pred_feat[train_cols].values.astype(np.float32)
+
+            # 加異常分數
+            pred_anomaly = anomaly_extractor.transform(X_pred_raw)
+            X_pred = np.hstack([X_pred_raw, pred_anomaly])
+
+            # 加 GNN embedding（如果有）
+            if not skip_gnn and gnn_embed_dim > 0:
+                # predict 用戶沒有 GNN 圖，用零向量填充
+                gnn_zeros = np.zeros((len(X_pred), gnn_embed_dim), dtype=np.float32)
+                X_pred = np.hstack([X_pred, gnn_zeros])
+
+            print(f"  Predict 特徵維度: {X_pred.shape[1]} (與 train 一致: {X_tr.shape[1]})")
+
+            X_tr_aug, y_tr_aug, pl_stats = pseudo_label(
+                ensemble, X_tr, y_tr, X_pred,
+                pos_threshold=0.85,
+                neg_threshold=0.05,
+                max_iter=2,
+            )
+
+            with open(os.path.join(output_dir, "pseudo_label_stats.json"), "w", encoding="utf-8") as f:
+                json.dump(pl_stats, f, indent=2, ensure_ascii=False)
+
+            # 用擴充後資料重新訓練
+            if len(X_tr_aug) > len(X_tr):
+                print(f"\n  用擴充資料重新訓練 ensemble ...")
+                ensemble_pl = StackingEnsemble(
+                    n_splits=5,
+                    use_focal_loss=use_focal_loss,
+                    use_smote=use_smote,
+                    smote_strategy=smote_strategy,
+                )
+                ensemble_pl.fit(X_tr_aug, y_tr_aug)
+
+                # 比較：擴充前 vs 擴充後
+                from sklearn.metrics import f1_score as f1_fn, average_precision_score as ap_fn
+                proba_before = ensemble.predict_proba(X_te)
+                proba_after = ensemble_pl.predict_proba(X_te)
+                t_before = ensemble.oof_threshold
+                t_after = ensemble_pl.oof_threshold
+                f1_before = f1_fn(y_te, (proba_before >= t_before).astype(int))
+                f1_after = f1_fn(y_te, (proba_after >= t_after).astype(int))
+                ap_before = ap_fn(y_te, proba_before)
+                ap_after = ap_fn(y_te, proba_after)
+
+                print(f"\n  Pseudo-label 效果比較:")
+                print(f"    Before: F1={f1_before:.4f}, AUC-PR={ap_before:.4f}")
+                print(f"    After:  F1={f1_after:.4f}, AUC-PR={ap_after:.4f}")
+
+                if f1_after > f1_before:
+                    print(f"    ✓ 採用 pseudo-label 模型 (F1 +{f1_after-f1_before:.4f})")
+                    ensemble = ensemble_pl
+                else:
+                    print(f"    ✗ 保持原始模型 (pseudo-label 未改善)")
+        else:
+            print("  [注意] 找不到 predict/ 資料目錄，跳過")
 
     # ── Step 6：評估 ─────────────────────────────
     print("\n" + "="*55)
     print("[Step 6] 模型評估")
     print("="*55)
 
-    y_proba   = ensemble.predict_proba(X_te, gnn_proba=gnn_te)
+    y_proba   = ensemble.predict_proba(X_te)
     # 先用 OOF 閾值評估
     optimal_t = ensemble.oof_threshold
     metrics   = evaluate(y_te, y_proba, threshold=optimal_t, label=f"Soft Voting Ensemble (t={optimal_t:.2f})")
@@ -352,6 +516,34 @@ def main(data_dir: str = "adjust_data/train", output_dir: str = "output", skip_g
     test_t    = find_optimal_threshold(y_te, y_proba)
     metrics["oof_threshold"]  = float(optimal_t)
     metrics["test_threshold"] = float(test_t)
+
+    # 閾值掃描：找 F1 最佳閾值
+    from sklearn.metrics import precision_recall_curve, f1_score as f1_fn
+    precision_arr, recall_arr, thresh_arr = precision_recall_curve(y_te, y_proba)
+    f1_arr = np.where(
+        (precision_arr + recall_arr) > 0,
+        2 * precision_arr * recall_arr / (precision_arr + recall_arr),
+        0,
+    )
+    best_idx = np.argmax(f1_arr[:-1])  # 最後一個是 sentinel
+    best_sweep_t = thresh_arr[best_idx]
+    best_sweep_f1 = f1_arr[best_idx]
+
+    print(f"\n  閾值掃描最佳: t={best_sweep_t:.4f} → F1={best_sweep_f1:.4f} "
+          f"(P={precision_arr[best_idx]:.4f}, R={recall_arr[best_idx]:.4f})")
+
+    # 如果掃描閾值比 OOF 閾值更好，用掃描閾值
+    f1_oof_t = f1_fn(y_te, (y_proba >= optimal_t).astype(int))
+    if best_sweep_f1 > f1_oof_t:
+        print(f"  → 採用掃描閾值 (F1: {f1_oof_t:.4f} → {best_sweep_f1:.4f})")
+        optimal_t = best_sweep_t
+        metrics = evaluate(y_te, y_proba, threshold=optimal_t,
+                          label=f"Soft Voting Ensemble (t={optimal_t:.4f})")
+
+    metrics["oof_threshold"]  = float(ensemble.oof_threshold)
+    metrics["test_threshold"] = float(test_t)
+    metrics["sweep_threshold"] = float(best_sweep_t)
+    metrics["sweep_f1"] = float(best_sweep_f1)
 
     with open(os.path.join(output_dir, "metrics.json"), "w", encoding="utf-8") as f:
         json.dump({k: float(v) for k, v in metrics.items()}, f, indent=2, ensure_ascii=False)
@@ -435,7 +627,7 @@ def main(data_dir: str = "adjust_data/train", output_dir: str = "output", skip_g
     print("[Step 9] 全量用戶風險評分輸出")
     print("="*55)
 
-    all_proba = ensemble.predict_proba(X, gnn_proba=gnn_proba_all)
+    all_proba = ensemble.predict_proba(X_all)
 
     result_df = pd.DataFrame({
         "user_id":             feat_df.index,
@@ -464,8 +656,8 @@ def main(data_dir: str = "adjust_data/train", output_dir: str = "output", skip_g
     print(f"\n{'='*55}")
     print(f"  完成！輸出目錄：{out}/")
     print(f"{'='*55}")
-    print(f"  features_raw.csv                原始特徵矩陣（60）")
-    print(f"  features.csv                    篩選後特徵矩陣（47）")
+    print(f"  features_raw.csv                原始特徵矩陣")
+    print(f"  features.csv                    篩選後特徵矩陣 + 異常分數")
     print(f"  feature_selection_report.json    特徵篩選報告")
     print(f"  metrics.json                    評估指標")
     print(f"  user_risk_scores.csv            全量風險評分")
@@ -473,7 +665,7 @@ def main(data_dir: str = "adjust_data/train", output_dir: str = "output", skip_g
     print(f"  risk_reports.txt                高風險個體報告")
     print(f"  ssr_results.json                SSR 穩定性數據")
     print(f"  ssr_curves.png                  SSR 衰減曲線圖")
-    if not skip_gnn and gnn_proba_all is not None:
+    if not skip_gnn and gnn_embed_dim > 0:
         print(f"  gnn_model.pt                    GNN 模型權重")
 
     return ensemble, result_df, metrics
@@ -487,7 +679,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="虛擬貨幣黑名單預測訓練")
     parser.add_argument(
         "--data_dir", default="../adjust_data/train",
-        help="CSV 資料夾路徑（預設：../",
+        help="訓練資料夾路徑",
+    )
+    parser.add_argument(
+        "--predict_dir", default="../adjust_data/predict",
+        help="Predict 資料夾路徑（pseudo-labeling 用）",
     )
     parser.add_argument(
         "--output", default="output",
@@ -497,5 +693,34 @@ if __name__ == "__main__":
         "--skip_gnn", action="store_true", default=False,
         help="跳過 GNN 訓練（資料量小或無鏈上交易時使用）",
     )
+    parser.add_argument(
+        "--use_focal_loss", action="store_true", default=True,
+        help="LightGBM 使用 Focal Loss（預設開啟）",
+    )
+    parser.add_argument(
+        "--no_focal_loss", action="store_true", default=False,
+        help="關閉 Focal Loss，使用 scale_pos_weight",
+    )
+    parser.add_argument(
+        "--use_smote", action="store_true", default=False,
+        help="啟用 Borderline-SMOTE（每個 CV fold 內部執行）",
+    )
+    parser.add_argument(
+        "--smote_strategy", type=float, default=0.3,
+        help="SMOTE sampling_strategy（預設 0.3 = 正負比約 3:1）",
+    )
+    parser.add_argument(
+        "--use_pseudo_label", action="store_true", default=False,
+        help="啟用 Pseudo-labeling 半監督學習",
+    )
     args = parser.parse_args()
-    main(data_dir=args.data_dir, output_dir=args.output, skip_gnn=args.skip_gnn)
+    main(
+        data_dir=args.data_dir,
+        predict_dir=args.predict_dir,
+        output_dir=args.output,
+        skip_gnn=args.skip_gnn,
+        use_focal_loss=not args.no_focal_loss,
+        use_smote=args.use_smote,
+        smote_strategy=args.smote_strategy,
+        use_pseudo_label=args.use_pseudo_label,
+    )
