@@ -20,7 +20,9 @@ import pandas as pd
 import torch
 from sklearn.model_selection import train_test_split
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Wei_model/model/ → Wei_model/ → 專案根目錄
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+WEI_MODEL_DIR = os.path.dirname(os.path.abspath(__file__))  # Wei_model/model/
 sys.path.insert(0, ROOT)
 
 # 直接從當前目錄導入（所有模組都在 model/ 目錄下）
@@ -244,9 +246,9 @@ def train_gnn(
 # ═══════════════════════════════════════════════
 
 def main(
-    data_dir: str = "adjust_data/train",
-    predict_dir: str = "adjust_data/predict",
-    output_dir: str = "output",
+    data_dir: str = os.path.join(ROOT, "adjust_data", "train"),
+    predict_dir: str = os.path.join(ROOT, "adjust_data", "predict"),
+    output_dir: str = os.path.join(os.path.dirname(WEI_MODEL_DIR), "output"),
     skip_gnn: bool = False,
     use_focal_loss: bool = True,
     use_smote: bool = False,
@@ -548,6 +550,17 @@ def main(
     with open(os.path.join(output_dir, "metrics.json"), "w", encoding="utf-8") as f:
         json.dump({k: float(v) for k, v in metrics.items()}, f, indent=2, ensure_ascii=False)
 
+    # 輸出測試集每筆的機率值（模型沒看過的資料）
+    test_result_df = pd.DataFrame({
+        "user_id":    feat_df.index[idx_te],
+        "true_label": y_te,
+        "risk_score": y_proba,
+        "pred_label":  (y_proba >= optimal_t).astype(int),
+    })
+    test_result_df = test_result_df.sort_values("risk_score", ascending=False)
+    test_result_df.to_csv(os.path.join(output_dir, "test_predictions.csv"), index=False)
+    print(f"\n  測試集預測結果已儲存：test_predictions.csv ({len(test_result_df)} 筆)")
+
     # ── Step 7：SHAP ─────────────────────────────
     print("\n" + "="*55)
     print("[Step 7] SHAP 可解釋性分析")
@@ -678,16 +691,16 @@ def main(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="虛擬貨幣黑名單預測訓練")
     parser.add_argument(
-        "--data_dir", default="../adjust_data/train",
+        "--data_dir", default=os.path.join(ROOT, "adjust_data", "train"),
         help="訓練資料夾路徑",
     )
     parser.add_argument(
-        "--predict_dir", default="../adjust_data/predict",
+        "--predict_dir", default=os.path.join(ROOT, "adjust_data", "predict"),
         help="Predict 資料夾路徑（pseudo-labeling 用）",
     )
     parser.add_argument(
-        "--output", default="output",
-        help="輸出目錄（預設：output/）",
+        "--output", default=os.path.join(os.path.dirname(WEI_MODEL_DIR), "output"),
+        help="輸出目錄（預設：Wei_model/output/）",
     )
     parser.add_argument(
         "--skip_gnn", action="store_true", default=False,

@@ -7,7 +7,12 @@
 5. Full Phase 1: 全部啟用
 """
 import sys, json, os, time
-sys.path.insert(0, "model")
+
+# Wei_model/ → 專案根目錄
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(_SCRIPT_DIR)
+
+sys.path.insert(0, os.path.join(_SCRIPT_DIR, "model"))
 
 import pandas as pd
 import numpy as np
@@ -19,7 +24,9 @@ from anomaly_detection import AnomalyFeatureExtractor, add_anomaly_scores_to_spl
 from ensemble import StackingEnsemble, evaluate, find_optimal_threshold
 from shap_explainer import SHAPExplainer, CounterfactualExplainer, SSREvaluator
 
-os.makedirs("output/test_run", exist_ok=True)
+DATA_DIR = os.path.join(ROOT, "adjust_data", "train")
+OUTPUT_DIR = os.path.join(_SCRIPT_DIR, "output", "test_run")
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # ══════════════════════════════════════════════════
 # 資料載入 + 特徵工程（共用）
@@ -27,16 +34,16 @@ os.makedirs("output/test_run", exist_ok=True)
 print("=" * 60)
 print("[1] 載入資料（取樣 5000 筆）")
 print("=" * 60)
-user_info = pd.read_csv("adjust_data/train/user_info_train.csv", low_memory=False)
+user_info = pd.read_csv(os.path.join(DATA_DIR, "user_info_train.csv"), low_memory=False)
 black_ids = user_info[user_info["status"] == 1]["user_id"].values
 normal_ids = user_info[user_info["status"] == 0]["user_id"].head(4000).values
 sample_ids = set(np.concatenate([black_ids[:1000], normal_ids]))
 
 user_info = user_info[user_info["user_id"].isin(sample_ids)]
-twd     = pd.read_csv("adjust_data/train/twd_transfer_train.csv", low_memory=False)
-crypto  = pd.read_csv("adjust_data/train/crypto_transfer_train.csv", low_memory=False)
-trading = pd.read_csv("adjust_data/train/usdt_twd_trading_train.csv", low_memory=False)
-swap    = pd.read_csv("adjust_data/train/usdt_swap_train.csv", low_memory=False)
+twd     = pd.read_csv(os.path.join(DATA_DIR, "twd_transfer_train.csv"), low_memory=False)
+crypto  = pd.read_csv(os.path.join(DATA_DIR, "crypto_transfer_train.csv"), low_memory=False)
+trading = pd.read_csv(os.path.join(DATA_DIR, "usdt_twd_trading_train.csv"), low_memory=False)
+swap    = pd.read_csv(os.path.join(DATA_DIR, "usdt_swap_train.csv"), low_memory=False)
 
 twd     = twd[twd["user_id"].isin(sample_ids)]
 crypto  = crypto[crypto["user_id"].isin(sample_ids)]
@@ -171,7 +178,7 @@ for name, m in all_results.items():
 
 
 # ── 儲存結果 ──
-with open("output/test_run/ablation_results.json", "w", encoding="utf-8") as f:
+with open(os.path.join(OUTPUT_DIR, "ablation_results.json"), "w", encoding="utf-8") as f:
     json.dump(all_results, f, indent=2, ensure_ascii=False)
 
 
@@ -194,7 +201,7 @@ bg_n = min(100, len(X_te_scaled))
 explainer.fit(X_te_scaled[:bg_n], X_te_scaled)
 explainer.plot_global_importance(
     top_n=20,
-    save_path="output/test_run/shap_global.png",
+    save_path=os.path.join(OUTPUT_DIR, "shap_global.png"),
 )
 
 # ── SSR ──
@@ -209,12 +216,12 @@ ssr_results = ssr_eval.evaluate(
     n_samples=50,
     n_perturbations=5,
 )
-ssr_eval.plot_ssr_curves(ssr_results, save_path="output/test_run/ssr_curves.png")
+ssr_eval.plot_ssr_curves(ssr_results, save_path=os.path.join(OUTPUT_DIR, "ssr_curves.png"))
 
 
 print(f"\n{'='*60}")
 print("  測試完成！")
 print(f"{'='*60}")
-print(f"  消融實驗結果: output/test_run/ablation_results.json")
-print(f"  SHAP 圖: output/test_run/shap_global.png")
-print(f"  SSR 曲線: output/test_run/ssr_curves.png")
+print(f"  消融實驗結果: {OUTPUT_DIR}/ablation_results.json")
+print(f"  SHAP 圖: {OUTPUT_DIR}/shap_global.png")
+print(f"  SSR 曲線: {OUTPUT_DIR}/ssr_curves.png")

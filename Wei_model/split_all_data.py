@@ -2,9 +2,12 @@ import pandas as pd
 import os
 import glob
 
-# 建立輸出目錄
-os.makedirs('adjust_data/train', exist_ok=True)
-os.makedirs('adjust_data/predict', exist_ok=True)
+# 計算專案根目錄（Wei_model/ → 專案根目錄）
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# 建立輸出目錄（在專案根目錄下）
+os.makedirs(os.path.join(ROOT, 'adjust_data', 'train'), exist_ok=True)
+os.makedirs(os.path.join(ROOT, 'adjust_data', 'predict'), exist_ok=True)
 
 print("=" * 60)
 print("開始處理所有 CSV 檔案")
@@ -12,11 +15,11 @@ print("=" * 60)
 
 # ── 1. 讀取標籤檔案 ──────────────────────────────
 print("\n[1/6] 讀取標籤檔案...")
-train_label = pd.read_csv('RawData/train_label.csv')
+train_label = pd.read_csv(os.path.join(ROOT, 'RawData', 'train_label.csv'))
 train_user_ids = set(train_label['user_id'].unique())
 print(f"  訓練集 user_id 數量: {len(train_user_ids)}")
 
-predict_label = pd.read_csv('RawData/predict_label.csv')
+predict_label = pd.read_csv(os.path.join(ROOT, 'RawData', 'predict_label.csv'))
 predict_user_ids = set(predict_label['user_id'].unique())
 print(f"  預測集 user_id 數量: {len(predict_user_ids)}")
 
@@ -40,7 +43,7 @@ files_to_process = [
 for idx, filename in enumerate(files_to_process, start=2):
     print(f"\n[{idx}/6] 處理 {filename}...")
 
-    file_path = f'RawData/{filename}'
+    file_path = os.path.join(ROOT, 'RawData', filename)
     data = pd.read_csv(file_path)
 
     print(f"  總記錄數: {len(data):,}")
@@ -77,8 +80,8 @@ for idx, filename in enumerate(files_to_process, start=2):
 
     # 儲存到子目錄
     base_name = filename.replace('.csv', '')
-    train_file = f'adjust_data/train/{base_name}_train.csv'
-    predict_file = f'adjust_data/predict/{base_name}_predict.csv'
+    train_file = os.path.join(ROOT, 'adjust_data', 'train', f'{base_name}_train.csv')
+    predict_file = os.path.join(ROOT, 'adjust_data', 'predict', f'{base_name}_predict.csv')
 
     data_train.to_csv(train_file, index=False)
     data_predict.to_csv(predict_file, index=False)
@@ -93,7 +96,8 @@ print("=" * 60)
 
 print("\n生成的檔案:")
 for subdir in ['train', 'predict']:
+    subdir_path = os.path.join(ROOT, 'adjust_data', subdir)
     print(f"\n  adjust_data/{subdir}/")
-    for f in sorted(glob.glob(f'adjust_data/{subdir}/*.csv')):
+    for f in sorted(glob.glob(os.path.join(subdir_path, '*.csv'))):
         size = os.path.getsize(f) / (1024 * 1024)
         print(f"    {os.path.basename(f)} ({size:.1f} MB)")

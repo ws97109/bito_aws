@@ -6,10 +6,15 @@ import os
 import pandas as pd
 import numpy as np
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "model"))
+# Wei_model/ → 專案根目錄
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(_SCRIPT_DIR)
+
+sys.path.insert(0, os.path.join(_SCRIPT_DIR, "model"))
 from Feature_rngineering import build_all_features
 
-DATA_DIR = "adjust_data/train"
+DATA_DIR = os.path.join(ROOT, "adjust_data", "train")
+OUTPUT_DIR = os.path.join(_SCRIPT_DIR, "output")
 
 print("=" * 60)
 print("特徵工程測試")
@@ -17,11 +22,11 @@ print("=" * 60)
 
 # ── 載入資料 ──────────────────────────────────
 print("\n[1] 載入資料...")
-user_info = pd.read_csv(f"{DATA_DIR}/user_info_train.csv", low_memory=False)
-twd       = pd.read_csv(f"{DATA_DIR}/twd_transfer_train.csv", low_memory=False)
-crypto    = pd.read_csv(f"{DATA_DIR}/crypto_transfer_train.csv", low_memory=False)
-trading   = pd.read_csv(f"{DATA_DIR}/usdt_twd_trading_train.csv", low_memory=False)
-swap      = pd.read_csv(f"{DATA_DIR}/usdt_swap_train.csv", low_memory=False)
+user_info = pd.read_csv(os.path.join(DATA_DIR, "user_info_train.csv"), low_memory=False)
+twd       = pd.read_csv(os.path.join(DATA_DIR, "twd_transfer_train.csv"), low_memory=False)
+crypto    = pd.read_csv(os.path.join(DATA_DIR, "crypto_transfer_train.csv"), low_memory=False)
+trading   = pd.read_csv(os.path.join(DATA_DIR, "usdt_twd_trading_train.csv"), low_memory=False)
+swap      = pd.read_csv(os.path.join(DATA_DIR, "usdt_swap_train.csv"), low_memory=False)
 
 print(f"  user_info : {len(user_info):,} 筆")
 print(f"  twd       : {len(twd):,} 筆")
@@ -65,7 +70,7 @@ else:
         print(f"  {col}: {cnt}")
 
 # 儲存
-os.makedirs("output", exist_ok=True)
-feat_df.to_csv("output/features_test.csv")
-print(f"\n[8] 已儲存至 output/features_test.csv")
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+feat_df.to_csv(os.path.join(OUTPUT_DIR, "features_test.csv"))
+print(f"\n[8] 已儲存至 {OUTPUT_DIR}/features_test.csv")
 print("=" * 60)
