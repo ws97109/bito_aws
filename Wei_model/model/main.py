@@ -664,6 +664,79 @@ def main(
         bar = "█" * min(int(cnt / len(result_df) * 50), 45)
         print(f"  {level:<6}  {cnt:>6}  {bar}")
 
+    # ── Step 10：Predict 資料預測 → 提交 CSV ─────
+    print("\n" + "="*55)
+    print("[Step 10] 對 predict 資料產出最終提交 CSV")
+    print("="*55)
+
+    pred_tables = load_predict_data(predict_dir)
+    if pred_tables is not None:
+        pred_user    = pred_tables["user_info_predict"]
+        pred_twd     = pred_tables["twd_transfer_predict"]
+        pred_crypto  = pred_tables["crypto_transfer_predict"]
+        pred_trading = pred_tables["usdt_twd_trading_predict"]
+        pred_swap    = pred_tables["usdt_swap_predict"]
+
+        print(f"  Predict 用戶數: {len(pred_user):,}")
+
+        # 特徵工程
+        pred_feat = build_all_features(pred_user, pred_twd, pred_crypto, pred_trading, pred_swap)
+        pred_feat = pred_feat.replace([np.inf, -np.inf], np.nan).fillna(0)
+
+        # 對齊欄位（用 train 的篩選後欄位）
+        train_cols = X_selected.columns.tolist()
+        for col in train_cols:
+            if col not in pred_feat.columns:
+                pred_feat[col] = 0
+        X_pred_raw = pred_feat[train_cols].values.astype(np.float32)
+
+        # 加異常分數
+        pred_anomaly = anomaly_extractor.transform(X_pred_raw)
+        X_pred = np.hstack([X_pred_raw, pred_anomaly])
+
+        # 加 GNN embedding（predict 用戶無圖，用零向量）
+        if not skip_gnn and gnn_embed_dim > 0:
+            gnn_zeros = np.zeros((len(X_pred), gnn_embed_dim), dtype=np.float32)
+            X_pred = np.hstack([X_pred, gnn_zeros])
+
+        print(f"  特徵維度: {X_pred.shape[1]} (與 train 一致: {X_tr.shape[1]})")
+
+        # 預測
+        pred_proba = ensemble.predict_proba(X_pred)
+        pred_labels = (pred_proba >= optimal_t).astype(int)
+
+        # 產出提交 CSV（格式：user_id, status）
+        submission_df = pd.DataFrame({
+            "user_id": pred_feat.index,
+            "status":  pred_labels,
+        })
+        submission_path = os.path.join(output_dir, "submission.csv")
+        submission_df.to_csv(submission_path, index=False)
+
+        # 同時輸出含機率的詳細版（供自己分析用）
+        detail_df = pd.DataFrame({
+            "user_id":    pred_feat.index,
+            "risk_score": pred_proba,
+            "status":     pred_labels,
+        }).sort_values("risk_score", ascending=False)
+        detail_df.to_csv(os.path.join(output_dir, "predict_detail.csv"), index=False)
+
+        n_black = pred_labels.sum()
+        print(f"\n  閾值: {optimal_t:.4f}")
+        print(f"  預測黑名單: {n_black} / {len(pred_labels)} ({n_black/len(pred_labels)*100:.2f}%)")
+        print(f"  提交檔案: {submission_path}")
+
+        # 機率分布統計
+        print(f"\n  Predict 機率分布:")
+        for lo, hi, label in [(0, 0.2, "正常"), (0.2, 0.4, "低風險"),
+                               (0.4, 0.6, "中風險"), (0.6, 0.8, "高風險"),
+                               (0.8, 1.001, "極高風險")]:
+            cnt = ((pred_proba >= lo) & (pred_proba < hi)).sum()
+            bar = "█" * min(int(cnt / len(pred_proba) * 50), 45)
+            print(f"    {label:<6}  {cnt:>6}  {bar}")
+    else:
+        print("  [注意] 找不到 predict/ 資料目錄，跳過")
+
     # ── 完成 ─────────────────────────────────────
     out = os.path.abspath(output_dir)
     print(f"\n{'='*55}")
@@ -674,6 +747,9 @@ def main(
     print(f"  feature_selection_report.json    特徵篩選報告")
     print(f"  metrics.json                    評估指標")
     print(f"  user_risk_scores.csv            全量風險評分")
+    print(f"  test_predictions.csv            測試集預測結果")
+    print(f"  submission.csv                  ★ 比賽提交檔案")
+    print(f"  predict_detail.csv              Predict 詳細機率")
     print(f"  shap_global.png                 特徵重要性圖")
     print(f"  risk_reports.txt                高風險個體報告")
     print(f"  ssr_results.json                SSR 穩定性數據")
