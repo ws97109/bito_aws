@@ -21,3 +21,11 @@ venv/
 .env
 
 plot/
+
+# CatBoost temp
+catboost_info/
+Wei_model/model/catboost_info/
+
+# Model output (large files)
+output/
+Wei_model/output/
