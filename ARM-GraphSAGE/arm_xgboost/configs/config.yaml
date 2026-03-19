@@ -1,0 +1,180 @@
+# ARM-GraphSAGE → XGBoost Pipeline Configuration
+# Version: 2.0
+
+# ──────────────────────────────────────────
+# Data Paths
+# ──────────────────────────────────────────
+data:
+  raw_data_dir: "/mnt/nfs/maokao_1/Bio_AWS_Workshop/RawData"
+  output_dir: "./results"
+
+  # Raw table file names
+  user_info: "user_info.csv"
+  twd_transfer: "twd_transfer.csv"
+  usdt_swap: "usdt_swap.csv"
+  usdt_twd_trading: "usdt_twd_trading.csv"
+  crypto_transfer: "crypto_transfer.csv"
+
+  # Intermediate outputs
+  user_features: "user_features.csv"
+  arm_rules: "arm_rules.pkl"
+  arm_features: "arm_features.csv"
+  cate_scores: "cate_scores.csv"
+  node_features: "node_features.csv"
+  hetero_graph: "graph.pt"
+  gnn_embeddings: "gnn_embeddings.npy"
+  gnn_user_id_map: "gnn_user_id_map.csv"   # idx → user_id mapping
+  fraud_scores: "fraud_scores.csv"
+  xgb_model: "xgb_model.pkl"
+
+# ──────────────────────────────────────────
+# Unit Scaling (× 1e-8 before any feature extraction)
+# ──────────────────────────────────────────
+unit_scaling:
+  twd_transfer:
+    - ori_samount
+  crypto_transfer:
+    - ori_samount
+    - twd_srate
+  usdt_twd_trading:
+    - trade_samount
+    - twd_srate
+  usdt_swap:
+    - twd_samount
+    - currency_samount
+
+# ──────────────────────────────────────────
+# Feature Engineering
+# ──────────────────────────────────────────
+feature_engineering:
+  log_transform_amounts: true
+  time_features: true
+  ip_features: true
+  window_days: 180
+
+# ──────────────────────────────────────────
+# ARM (Association Rule Mining)
+# ──────────────────────────────────────────
+arm:
+  min_support: 0.01
+  min_confidence: 0.6
+  min_lift: 2.0
+
+  thresholds:
+    high_withdraw_ratio: 0.85
+    night_tx_ratio: 0.4
+    multi_ip_count: 5
+    ip_shared_rate: 0.3
+    buy_only_ratio: 0.9
+    high_speed_trade: 10
+    market_order_ratio: 0.7
+    fast_swap_hours: 1
+    quick_kyc_days: 1
+    low_age: 22
+    high_amount_single: 500000   # TWD, after ×1e-8 scaling
+    fixed_amount_std: 100
+
+# ──────────────────────────────────────────
+# Causal Forest
+# ──────────────────────────────────────────
+causal_forest:
+  treatment_threshold: 2.0
+  n_estimators: 200
+  min_samples_leaf: 10
+  random_state: 42
+
+# ──────────────────────────────────────────
+# Heterogeneous Graph
+# ──────────────────────────────────────────
+graph:
+  node_types:
+    - "user"
+    - "wallet"
+  edge_types:
+    - ["user", "sends_to", "wallet"]
+    - ["wallet", "receives_from", "user"]
+    - ["user", "transacts_with", "user"]
+  filter_null_relations: true
+  filter_zero_amounts: true
+  add_reverse_edges: true
+
+# ──────────────────────────────────────────
+# GNN (ARM-GraphSAGE Encoder)
+# ──────────────────────────────────────────
+gnn:
+  hidden_dim: 128
+  out_dim: 64          # embedding dimension fed to XGBoost
+  num_heads: 4
+  num_layers: 2
+  dropout: 0.3
+  aggregator: "gatv2"
+  use_arm_edge_weights: true
+  use_cf_gating: true
+
+# ──────────────────────────────────────────
+# GNN Training
+# ──────────────────────────────────────────
+training:
+  epochs: 100
+  batch_size: 1024
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  num_neighbors: [10, 5]
+
+  loss_type: "focal"
+  focal_alpha: 0.25
+  focal_gamma: 2.0
+
+  patience: 15
+  min_delta: 0.001
+
+  train_ratio: 0.7
+  val_ratio: 0.15
+  test_ratio: 0.15
+
+# ──────────────────────────────────────────
+# XGBoost Classifier
+# ──────────────────────────────────────────
+xgboost:
+  n_estimators: 1000
+  learning_rate: 0.05
+  max_depth: 6
+  min_child_weight: 5
+  subsample: 0.8
+  colsample_bytree: 0.8
+  reg_alpha: 0.1
+  reg_lambda: 1.0
+  random_state: 42
+
+  # Input feature sets to concatenate (at least one must be true)
+  use_gnn_embeddings: true      # 64-dim GNN embeddings
+  use_tabular_features: true    # ~43-dim tabular features
+  use_arm_features: false       # 4-dim ARM features (already absorbed by GNN)
+  use_cate_scores: true         # 1-dim CATE score
+
+  # Evaluation
+  eval_metric: "aucpr"
+  early_stopping_rounds: 30
+  test_size: 0.2
+
+  # SHAP explainability
+  compute_shap: true
+  shap_top_k: 20
+
+# ──────────────────────────────────────────
+# Evaluation Metrics
+# ──────────────────────────────────────────
+evaluation:
+  primary_metric: "pr_auc"
+  metrics:
+    - "pr_auc"
+    - "roc_auc"
+    - "precision_at_100"
+    - "recall_at_5pct_fpr"
+    - "f1_score"
+
+# ──────────────────────────────────────────
+# Misc
+# ──────────────────────────────────────────
+device: "cuda"
+seed: 42
