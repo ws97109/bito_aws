@@ -303,13 +303,31 @@ def generate_user_report(
 class SSREvaluator:
     """
     Stable Sample Ratio (SSR) — 驗證 SHAP 解釋的穩定性。
-    對每個用戶加入微小擾動，檢查 SHAP Top-k 風險因子是否一致。
+    基於 Type-aware Perturbation：依特徵語義類型做不同擾動。
+
+    特徵類型：
+      continuous    → 高斯擾動 N(0, ε·σ)
+      binary        → 機率 ε 翻轉 0↔1
+      label_encoded → 機率 ε 替換為另一有效值
+      ordinal       → 機率 ε 移動 ±1 級
     """
 
-    # 二元特徵列表（擾動方式不同）
-    BINARY_FEATURES = {
-        "is_high_risk_career", "is_high_risk_income",
-        "career_income_risk", "is_app_user", "twd_smurf_flag",
+    # 本專案特徵類型定義
+    FEATURE_TYPE_MAP = {
+        # binary
+        "is_high_risk_career": "binary",
+        "is_high_risk_income": "binary",
+        "career_income_risk":  "binary",
+        "is_app_user":         "binary",
+        "twd_smurf_flag":      "binary",
+        "is_female":           "binary",
+        "rapid_kyc_then_trade": "binary",
+        # ordinal（有序類別）
+        "sex":                 "ordinal",
+        "career":              "ordinal",
+        "income_source":       "ordinal",
+        "user_source":         "ordinal",
+        # 其餘皆為 continuous（預設）
     }
 
     def __init__(
@@ -319,25 +337,71 @@ class SSREvaluator:
     ):
         self.shap_explainer = explainer
         self.feature_names  = feature_names
+        # 解析每個特徵的類型
+        self.feature_types = [
+            self.FEATURE_TYPE_MAP.get(f, "continuous") for f in feature_names
+        ]
 
-    def _perturb(
+    def _perturb_batch(
         self,
-        X_row: np.ndarray,
+        X_batch: np.ndarray,
         epsilon: float,
         feature_stds: np.ndarray,
+        valid_values: Dict,
+        rng: np.random.RandomState,
     ) -> np.ndarray:
-        """Type-aware 擾動：連續特徵加高斯噪音，二元特徵機率翻轉"""
-        X_pert = X_row.copy()
-        for j, fname in enumerate(self.feature_names):
-            if fname in self.BINARY_FEATURES:
-                # 以機率 epsilon 翻轉 0 ↔ 1
-                if np.random.random() < epsilon:
-                    X_pert[j] = 1.0 - X_pert[j]
-            else:
-                # 高斯噪音 N(0, epsilon * std)
-                noise = np.random.normal(0, epsilon * feature_stds[j])
-                X_pert[j] = max(X_pert[j] + noise, 0)
+        """向量化 Type-aware 擾動（整批樣本一次處理）"""
+        X_pert = X_batch.copy()
+        n_samples = len(X_pert)
+
+        for j, (fname, ftype) in enumerate(zip(self.feature_names, self.feature_types)):
+            if ftype == "continuous":
+                if feature_stds[j] > 0:
+                    noise = rng.normal(0, epsilon * feature_stds[j], size=n_samples)
+                    X_pert[:, j] = X_pert[:, j] + noise
+
+            elif ftype == "binary":
+                flip_mask = rng.random(n_samples) < epsilon
+                X_pert[flip_mask, j] = 1.0 - X_pert[flip_mask, j]
+
+            elif ftype == "label_encoded":
+                replace_mask = rng.random(n_samples) < epsilon
+                n_replace = replace_mask.sum()
+                if n_replace > 0 and fname in valid_values:
+                    vals = valid_values[fname]
+                    if len(vals) > 1:
+                        current = X_pert[replace_mask, j]
+                        new_vals = np.empty(n_replace)
+                        for i in range(n_replace):
+                            candidates = [v for v in vals if v != current[i]]
+                            new_vals[i] = rng.choice(candidates) if candidates else current[i]
+                        X_pert[replace_mask, j] = new_vals
+
+            elif ftype == "ordinal":
+                move_mask = rng.random(n_samples) < epsilon
+                n_move = move_mask.sum()
+                if n_move > 0 and fname in valid_values:
+                    vals = valid_values[fname]
+                    if len(vals) > 1:
+                        min_val, max_val = min(vals), max(vals)
+                        current = X_pert[move_mask, j].copy()
+                        directions = rng.choice([-1, 1], size=n_move)
+                        new_vals = current + directions
+                        # 邊界處理：超出範圍則反向
+                        new_vals = np.where(new_vals < min_val, current + 1, new_vals)
+                        new_vals = np.where(new_vals > max_val, current - 1, new_vals)
+                        new_vals = np.clip(new_vals, min_val, max_val)
+                        X_pert[move_mask, j] = new_vals
+
         return X_pert
+
+    def _collect_valid_values(self, X: np.ndarray) -> Dict:
+        """收集 label_encoded / ordinal 特徵的合法值"""
+        valid_values = {}
+        for j, (fname, ftype) in enumerate(zip(self.feature_names, self.feature_types)):
+            if ftype in ("label_encoded", "ordinal"):
+                valid_values[fname] = sorted(set(X[:, j].tolist()))
+        return valid_values
 
     def evaluate(
         self,
@@ -351,7 +415,7 @@ class SSREvaluator:
         random_state: int = 42,
     ) -> Dict:
         """
-        完整 SSR 評測。
+        完整 SSR 評測（Type-aware Perturbation）。
 
         回傳：
         {
@@ -367,17 +431,24 @@ class SSREvaluator:
         if top_k_list is None:
             top_k_list = [1, 3, 5]
 
-        np.random.seed(random_state)
+        rng = np.random.RandomState(random_state)
 
         # 抽樣
         n_samples = min(n_samples, len(X))
-        sample_idx = np.random.choice(len(X), n_samples, replace=False)
+        sample_idx = rng.choice(len(X), n_samples, replace=False)
         X_sample = X[sample_idx]
         y_sample = y[sample_idx] if y is not None else None
 
-        # 計算特徵標準差（用於擾動）
+        # 計算特徵標準差 & 合法值
         feature_stds = X.std(axis=0)
-        feature_stds[feature_stds == 0] = 1.0  # 避免除以零
+        feature_stds[feature_stds == 0] = 1.0
+        valid_values = self._collect_valid_values(X)
+
+        # 統計特徵類型分布
+        type_counts = {}
+        for ft in self.feature_types:
+            type_counts[ft] = type_counts.get(ft, 0) + 1
+        print(f"  特徵類型分布: {type_counts}")
 
         # 計算原始 SHAP 值
         print(f"  計算 {n_samples} 個樣本的原始 SHAP 值 ...")
@@ -386,54 +457,40 @@ class SSREvaluator:
         if isinstance(original_shap, list):
             original_shap = original_shap[1]
 
+        # 預計算 baseline Top-k
+        baseline_topk = {}
+        for k in top_k_list:
+            baseline_topk[k] = [
+                tuple(np.argsort(np.abs(original_shap[i]))[-k:][::-1])
+                for i in range(n_samples)
+            ]
+
         results = {"overall": {}, "by_class": {0: {}, 1: {}}}
 
         for eps in epsilons:
             print(f"  擾動 ε={eps:.2f} ...")
 
-            # 每個樣本的穩定計數
-            stable_counts = np.zeros(n_samples)
+            # 每個 k 的穩定計數
+            stability_counts = {k: np.zeros(n_samples) for k in top_k_list}
 
             for t in range(n_perturbations):
-                # 批次擾動
-                X_perturbed = np.array([
-                    self._perturb(X_sample[i], eps, feature_stds)
-                    for i in range(n_samples)
-                ])
+                trial_rng = np.random.RandomState(random_state + t * 1000 + int(eps * 100))
+                X_perturbed = self._perturb_batch(
+                    X_sample, eps, feature_stds, valid_values, trial_rng
+                )
                 pert_shap = explainer.shap_values(X_perturbed)
                 if isinstance(pert_shap, list):
                     pert_shap = pert_shap[1]
 
-                # 比對每個樣本的 Top-k
-                for i in range(n_samples):
-                    orig_order = np.argsort(np.abs(original_shap[i]))[::-1]
-                    pert_order = np.argsort(np.abs(pert_shap[i]))[::-1]
-
-                    # 用最大 k 檢查（後面再按 k 切分）
-                    max_k = max(top_k_list)
-                    if set(orig_order[:max_k]) == set(pert_order[:max_k]):
-                        stable_counts[i] += 1
-
-            for k in top_k_list:
-                # 重新計算每個 k 的穩定性
-                stable_k = np.zeros(n_samples)
-                for t in range(n_perturbations):
-                    X_perturbed = np.array([
-                        self._perturb(X_sample[i], eps, feature_stds)
-                        for i in range(n_samples)
-                    ])
-                    pert_shap = explainer.shap_values(X_perturbed)
-                    if isinstance(pert_shap, list):
-                        pert_shap = pert_shap[1]
-
+                for k in top_k_list:
                     for i in range(n_samples):
-                        orig_top = set(np.argsort(np.abs(original_shap[i]))[::-1][:k])
-                        pert_top = set(np.argsort(np.abs(pert_shap[i]))[::-1][:k])
-                        if orig_top == pert_top:
-                            stable_k[i] += 1
+                        pert_topk = tuple(np.argsort(np.abs(pert_shap[i]))[-k:][::-1])
+                        if pert_topk == baseline_topk[k][i]:
+                            stability_counts[k][i] += 1
 
-                # 穩定用戶：T 次中 >= threshold 比例一致
-                is_stable = (stable_k / n_perturbations) >= stability_threshold
+            min_stable = int(stability_threshold * n_perturbations)
+            for k in top_k_list:
+                is_stable = stability_counts[k] >= min_stable
                 ssr = is_stable.mean()
                 results["overall"][(eps, k)] = round(float(ssr), 4)
 

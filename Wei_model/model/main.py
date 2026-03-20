@@ -36,6 +36,7 @@ from shap_explainer import (
     SHAPExplainer, CounterfactualExplainer, generate_user_report,
     SSREvaluator,
 )
+from fairness_audit import run_fairness_audit
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"使用設備：{DEVICE}")
@@ -302,6 +303,12 @@ def main(
 
     with open(os.path.join(output_dir, "feature_selection_report.json"), "w", encoding="utf-8") as f:
         json.dump(selection_report, f, indent=2, ensure_ascii=False)
+
+    # ── 公平性處理：移除受保護屬性 ──
+    fairness_drop = [c for c in ["is_female", "age"] if c in X_selected.columns]
+    if fairness_drop:
+        X_selected = X_selected.drop(columns=fairness_drop)
+        print(f"\n  [公平性] 移除受保護屬性：{fairness_drop}")
 
     X             = X_selected.values.astype(np.float32)
     feature_names = X_selected.columns.tolist()
@@ -575,9 +582,34 @@ def main(
         save_path=os.path.join(output_dir, "shap_global.png"),
     )
 
+    # 全特徵 SHAP 比例表
+    from shap_explainer import FEATURE_NAME_MAP
+    mean_abs_shap = np.abs(explainer.shap_values).mean(axis=0)
+    total_shap = mean_abs_shap.sum()
+    shap_pct = mean_abs_shap / total_shap * 100
+    display_names = [FEATURE_NAME_MAP.get(f, f) for f in feature_names]
+
+    shap_table = pd.DataFrame({
+        "feature": feature_names,
+        "feature_zh": display_names,
+        "mean_abs_shap": mean_abs_shap,
+        "percentage": shap_pct,
+    }).sort_values("mean_abs_shap", ascending=False).reset_index(drop=True)
+    shap_table.insert(0, "rank", range(1, len(shap_table) + 1))
+    shap_table["cumulative_pct"] = shap_table["percentage"].cumsum()
+    shap_table.to_csv(os.path.join(output_dir, "shap_all_features.csv"), index=False)
+
+    print(f"\n  全特徵 SHAP 比例表（{len(feature_names)} 個特徵）：")
+    print(f"  {'排名':>4} {'特徵':<35} {'中文名稱':<20} {'佔比':>7} {'累積':>7}")
+    print(f"  {'-'*80}")
+    for _, row in shap_table.iterrows():
+        print(f"  {int(row['rank']):>4} {row['feature']:<35} {row['feature_zh']:<20} "
+              f"{row['percentage']:>6.2f}% {row['cumulative_pct']:>6.2f}%")
+    print(f"\n  已存至：shap_all_features.csv")
+
     # ── Step 8：個體報告 ─────────────────────────
     print("\n" + "="*55)
-    print("[Step 8] 生成高風險用戶個體報告（Top 5）")
+    print("[Step 8] 生成高風險用戶個體報告（Top 5）+ Waterfall 圖")
     print("="*55)
 
     cf_explainer  = CounterfactualExplainer(
@@ -586,6 +618,9 @@ def main(
     n_report      = min(5, len(y_proba))
     high_risk_idx = np.argsort(y_proba)[-n_report:][::-1]
     reports       = []
+
+    waterfall_dir = os.path.join(output_dir, "waterfall")
+    os.makedirs(waterfall_dir, exist_ok=True)
 
     for rank, local_idx in enumerate(high_risk_idx, 1):
         global_idx = idx_te[local_idx]
@@ -597,6 +632,12 @@ def main(
         cf_r   = cf_explainer.generate(X_te[local_idx])
         report = generate_user_report(uid, score, shap_r, cf_r)
 
+        # Waterfall 圖
+        explainer.plot_user_waterfall(
+            local_idx,
+            save_path=os.path.join(waterfall_dir, f"train_top{rank}_user{uid}.png"),
+        )
+
         tag    = "【實際黑名單】" if true_label == 1 else "【實際正常】"
         header = f"\n── 第 {rank} 高風險  {tag} ──"
         reports.append(header + "\n" + report)
@@ -605,6 +646,7 @@ def main(
 
     with open(os.path.join(output_dir, "risk_reports.txt"), "w", encoding="utf-8") as f:
         f.write("\n\n".join(reports))
+    print(f"\n  Waterfall 圖已存至：{waterfall_dir}/")
 
     # ── Step 8.5：SSR 穩定性評測 ──────────────────
     print("\n" + "="*55)
@@ -734,8 +776,105 @@ def main(
             cnt = ((pred_proba >= lo) & (pred_proba < hi)).sum()
             bar = "█" * min(int(cnt / len(pred_proba) * 50), 45)
             print(f"    {label:<6}  {cnt:>6}  {bar}")
+
+        # ── Step 10.5：Predict 高風險用戶可解釋性分析 ──
+        print("\n" + "="*55)
+        print("[Step 10.5] Predict 高風險用戶 SHAP 解釋 + Waterfall + 報告")
+        print("="*55)
+
+        # 找出被判為黑名單的用戶（依機率排序取 Top 10）
+        black_mask = pred_labels == 1
+        n_pred_report = min(10, int(black_mask.sum()))
+
+        if n_pred_report > 0:
+            # 計算 predict 用戶的 SHAP 值
+            X_pred_scaled = ensemble.scaler.transform(X_pred)
+            pred_explainer = SHAPExplainer(ensemble.xgb_model, feature_names)
+            # 用 train 測試集作為 background
+            pred_explainer.fit(X_te_scaled[:min(200, len(X_te_scaled))], X_pred_scaled)
+
+            # 取風險最高的 n_pred_report 個
+            top_pred_idx = np.argsort(pred_proba)[-n_pred_report:][::-1]
+
+            pred_waterfall_dir = os.path.join(output_dir, "waterfall_predict")
+            os.makedirs(pred_waterfall_dir, exist_ok=True)
+
+            pred_reports = []
+            pred_reports_json = []
+
+            for rank, idx in enumerate(top_pred_idx, 1):
+                uid   = pred_feat.index[idx]
+                score = float(pred_proba[idx])
+
+                # SHAP 個體解釋
+                shap_r = pred_explainer.explain_user(idx, user_id=uid, risk_score=score)
+
+                # 反事實解釋
+                cf_r = cf_explainer.generate(X_pred[idx])
+
+                # 文字報告
+                report = generate_user_report(uid, score, shap_r, cf_r)
+
+                # Waterfall 圖
+                pred_explainer.plot_user_waterfall(
+                    idx,
+                    save_path=os.path.join(pred_waterfall_dir, f"predict_top{rank}_user{uid}.png"),
+                )
+
+                header = f"\n── Predict 第 {rank} 高風險 ──"
+                pred_reports.append(header + "\n" + report)
+                print(header)
+                print(report)
+
+                # JSON 格式（供前端 Demo 使用）
+                pred_reports_json.append({
+                    "rank": rank,
+                    "user_id": int(uid),
+                    "risk_score": score,
+                    "risk_level": shap_r.get("risk_level", "極高風險"),
+                    "shap_factors": shap_r["factors"][:5],
+                    "counterfactual": cf_r,
+                })
+
+            # 存文字報告
+            with open(os.path.join(output_dir, "predict_risk_reports.txt"), "w", encoding="utf-8") as f:
+                f.write("\n\n".join(pred_reports))
+
+            # 存 JSON（供前端使用）
+            with open(os.path.join(output_dir, "predict_risk_reports.json"), "w", encoding="utf-8") as f:
+                json.dump(pred_reports_json, f, indent=2, ensure_ascii=False)
+
+            # Predict 全域 SHAP 圖（只看被判黑名單的用戶）
+            pred_explainer.plot_global_importance(
+                top_n=20,
+                save_path=os.path.join(output_dir, "shap_predict_blacklist.png"),
+            )
+
+            print(f"\n  Predict 報告已產出：")
+            print(f"    predict_risk_reports.txt        文字報告（Top {n_pred_report}）")
+            print(f"    predict_risk_reports.json       JSON 報告（供前端）")
+            print(f"    shap_predict_blacklist.png      黑名單用戶 SHAP 全域圖")
+            print(f"    waterfall_predict/              個體 Waterfall 圖")
+        else:
+            print("  [注意] 沒有用戶被判為黑名單，跳過可解釋性分析")
     else:
         print("  [注意] 找不到 predict/ 資料目錄，跳過")
+
+    # ── Step 11：公平性檢測 ─────────────────────────
+    print("\n" + "="*55)
+    print("[Step 11] 模型公平性檢測 (Fairness Audit)")
+    print("="*55)
+
+    # 使用測試集進行公平性評估（模型未見過的資料）
+    # 從原始特徵取受保護屬性（即使已從訓練中移除，仍需用於公平性監控）
+    test_feat_for_fairness = X_raw.iloc[idx_te]
+    test_pred_labels = (y_proba >= optimal_t).astype(int)
+    fairness_results = run_fairness_audit(
+        feat_df=test_feat_for_fairness,
+        y_true=y_te,
+        y_pred=test_pred_labels,
+        output_dir=output_dir,
+    )
 
     # ── 完成 ─────────────────────────────────────
     out = os.path.abspath(output_dir)
@@ -750,10 +889,18 @@ def main(
     print(f"  test_predictions.csv            測試集預測結果")
     print(f"  submission.csv                  ★ 比賽提交檔案")
     print(f"  predict_detail.csv              Predict 詳細機率")
-    print(f"  shap_global.png                 特徵重要性圖")
-    print(f"  risk_reports.txt                高風險個體報告")
+    print(f"  shap_global.png                 特徵重要性圖（train）")
+    print(f"  risk_reports.txt                高風險個體報告（train）")
+    print(f"  waterfall/                      Waterfall 圖（train Top 5）")
     print(f"  ssr_results.json                SSR 穩定性數據")
     print(f"  ssr_curves.png                  SSR 衰減曲線圖")
+    print(f"  predict_risk_reports.txt        ★ Predict 高風險用戶報告")
+    print(f"  predict_risk_reports.json       ★ Predict 報告 JSON（供前端）")
+    print(f"  shap_predict_blacklist.png      ★ Predict 黑名單 SHAP 圖")
+    print(f"  waterfall_predict/              ★ Predict Waterfall 圖")
+    print(f"  fairness_report.csv            ★ 公平性指標報告")
+    print(f"  fairness_summary.json          ★ 公平性摘要 + 建議")
+    print(f"  fairness_charts.png            ★ 公平性視覺化圖表")
     if not skip_gnn and gnn_embed_dim > 0:
         print(f"  gnn_model.pt                    GNN 模型權重")
 
