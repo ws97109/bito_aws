@@ -5,22 +5,47 @@ import { NodeDetailPanel } from '../graph/NodeDetailPanel';
 
 export function Dashboard() {
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 px-6 py-3">
-        <h1 className="text-lg font-bold text-gray-800">BitoGuard 詐騙偵測儀表板</h1>
-      </header>
-      <div className="flex flex-col lg:flex-row h-[calc(100vh-52px)]">
-        {/* Left: Stats Panel (25%) */}
-        <aside className="w-full lg:w-1/4 bg-white border-r border-gray-200 overflow-y-auto">
-          <StatsPanel />
-        </aside>
-        {/* Right: Main area (75%) */}
-        <main className="w-full lg:w-3/4 overflow-y-auto">
-          <NodeSelector />
-          <div className="px-4">
-            <GraphViewer />
+    <div className="flex flex-col h-screen text-slate-200 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+      <header className="bg-slate-900/80 backdrop-blur-md shadow-xl px-6 py-4 z-20 border-b border-slate-700/60">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-sky-500/20 border border-sky-500/40 text-sky-400 text-lg">
+              &#128737;
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-sky-400 leading-tight">BitoGuard 詐騙偵測儀表板</h1>
+              <p className="text-xs text-slate-500 leading-tight">即時交易圖分析平台</p>
+            </div>
           </div>
-          <NodeDetailPanel />
+          <div className="flex items-center gap-2 text-xs text-slate-400">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse inline-block"></span>
+            系統運行中
+          </div>
+        </div>
+      </header>
+
+      <div className="flex-1 flex flex-col lg:flex-row gap-4 p-4 overflow-hidden min-h-0">
+        {/* Left Panel */}
+        <aside className="w-full lg:w-72 bg-slate-800/50 backdrop-blur-sm ring-1 ring-slate-700/60 rounded-xl shadow-2xl overflow-y-auto flex-shrink-0">
+          <div className="p-4">
+            <StatsPanel />
+          </div>
+        </aside>
+
+        {/* Right Content — overflow-y-auto 讓整頁可滾動 */}
+        <main className="flex-1 flex flex-col gap-4 overflow-y-auto min-w-0">
+          {/* Top-right panel: Node selector + Graph */}
+          <div className="bg-slate-800/50 backdrop-blur-sm ring-1 ring-slate-700/60 rounded-xl shadow-2xl p-4 flex flex-col" style={{ minHeight: '480px' }}>
+            <NodeSelector />
+            {/* onWheel stopPropagation 讓滾輪 zoom 不被父層 overflow-y-auto 攔截 */}
+            <div className="mt-3 flex-1 min-h-0" onWheel={e => e.stopPropagation()}>
+              <GraphViewer />
+            </div>
+          </div>
+          {/* Bottom-right panel: Node detail —無 data 時極小，有 data 時自然展開 */}
+          <div className="bg-slate-800/50 backdrop-blur-sm ring-1 ring-slate-700/60 rounded-xl shadow-2xl px-4 py-3">
+            <NodeDetailPanel />
+          </div>
         </main>
       </div>
     </div>
