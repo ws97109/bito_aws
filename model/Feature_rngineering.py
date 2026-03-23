@@ -339,13 +339,84 @@ def build_all_features(
         .join(f_vel,     how="left")
     ).fillna(0)
 
-    # 複合風險分數（手工特徵交叉）
+    # ═══════════════════════════════════════════════════════════
+    # 高階交互特徵（提升區分度）
+    # ═══════════════════════════════════════════════════════════
+
+    # 1. 快速 KYC + 快速提領（疑似洗錢模式）
+    feat["quick_kyc_quick_withdraw"] = (
+        (feat["kyc_speed_sec"] < 3600) &              # KYC < 1小時
+        (feat["fund_stay_sec"] < 86400) &             # 資金停留 < 1天
+        (feat["twd_withdraw_ratio"] > 0.8)            # 提領比例 > 80%
+    ).astype(int)
+
+    # 2. 新帳號高風險行為
+    feat["new_account_high_risk"] = (
+        (feat["account_age_days"] < 30) &             # 新帳號 < 30天
+        (
+            (feat["ip_unique_count"] > 5) |           # 多 IP
+            (feat["crypto_currency_diversity"] > 3) | # 多幣種
+            (feat["twd_withdraw_ratio"] > 0.7)        # 高提領
+        )
+    ).astype(int)
+
+    # 3. 深夜高頻交易（異常時段）
+    feat["night_high_frequency"] = (
+        feat["ip_night_ratio"] *
+        np.log1p(feat["twd_dep_count"] + feat["crypto_wit_count"])
+    )
+
+    # 4. 大額快速流轉
+    feat["large_fast_turnover"] = (
+        np.log1p(feat["swap_sum"] + feat["total_trading_volume"]) /
+        np.log1p(feat["fund_stay_sec"] + 1)
+    )
+
+    # 5. 結構化交易 + 快速提領
+    feat["smurf_withdraw_pattern"] = (
+        feat["twd_smurf_flag"] * feat["twd_withdraw_ratio"]
+    )
+
+    # 6. 多幣種 × 多協議（複雜化追蹤）
+    feat["currency_protocol_complexity"] = (
+        feat["crypto_currency_diversity"] *
+        feat["crypto_protocol_diversity"]
+    )
+
+    # 7. 高風險職業 × 低 KYC
+    feat["risky_career_low_kyc"] = (
+        (feat["is_high_risk_career"] == 1) &
+        (feat["has_kyc_level2"] == 0)
+    ).astype(int)
+
+    # 8. 異常資金流速度（提領金額 / 時間）
+    feat["withdraw_velocity"] = (
+        feat["twd_wit_sum"] / (feat["fund_stay_sec"] + 1)
+    )
+
+    # 9. IP 多樣性 × 交易頻率
+    feat["ip_diversity_frequency"] = (
+        feat["ip_unique_count"] *
+        np.log1p(feat["twd_dep_count"] + feat["twd_wit_count"])
+    )
+
+    # 10. 年齡與資金規模不匹配（年輕但大額）
+    feat["age_volume_mismatch"] = np.where(
+        feat["age"] < 25,
+        np.log1p(feat["twd_dep_sum"] + feat["crypto_wit_sum"]),
+        0
+    )
+
+    # 更新複合風險分數（整合新特徵）
     feat["composite_risk_score"] = (
-        feat["twd_withdraw_ratio"]          * 0.25 +
-        feat["ip_night_ratio"]              * 0.15 +
-        feat["crypto_currency_diversity"]   * 0.10 +
-        feat["career_income_risk"]          * 0.20 +
-        (1 - feat["has_kyc_level2"])        * 0.30
+        feat["twd_withdraw_ratio"]          * 0.15 +
+        feat["ip_night_ratio"]              * 0.10 +
+        feat["crypto_currency_diversity"]   * 0.08 +
+        feat["career_income_risk"]          * 0.15 +
+        (1 - feat["has_kyc_level2"])        * 0.20 +
+        feat["quick_kyc_quick_withdraw"]    * 0.12 +
+        feat["new_account_high_risk"]       * 0.10 +
+        feat["smurf_withdraw_pattern"]      * 0.10
     ).clip(0, 1)
 
     return feat

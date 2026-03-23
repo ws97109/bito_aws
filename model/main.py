@@ -325,8 +325,8 @@ def main(data_dir: str = "adjust_data/train", output_dir: str = "output", skip_g
     print("="*55)
 
     y_proba   = ensemble.predict_proba(X_te, gnn_proba=gnn_te)
-    metrics   = evaluate(y_te, y_proba, label="Stacking Ensemble")
     optimal_t = find_optimal_threshold(y_te, y_proba)
+    metrics   = evaluate(y_te, y_proba, threshold=optimal_t, label="Stacking Ensemble")
     metrics["optimal_threshold"] = float(optimal_t)
 
     with open(os.path.join(output_dir, "metrics.json"), "w", encoding="utf-8") as f:
@@ -337,7 +337,9 @@ def main(data_dir: str = "adjust_data/train", output_dir: str = "output", skip_g
     print("[Step 7] SHAP 可解釋性分析")
     print("="*55)
 
-    explainer   = SHAPExplainer(ensemble.xgb_model, feature_names)
+    # 新版 ensemble 使用 xgb_models（列表），取第一個 fold 模型做 SHAP
+    best_xgb = ensemble.xgb_models[0]
+    explainer   = SHAPExplainer(best_xgb, feature_names)
     X_te_scaled = ensemble.scaler.transform(X_te)
     bg_n        = min(200, len(X_te_scaled))
     explainer.fit(X_te_scaled[:bg_n], X_te_scaled)
@@ -345,6 +347,25 @@ def main(data_dir: str = "adjust_data/train", output_dir: str = "output", skip_g
         top_n=20,
         save_path=os.path.join(output_dir, "shap_global.png"),
     )
+
+    # 三模型平均特徵重要性
+    try:
+        def _norm(arr):
+            s = arr.sum()
+            return arr / s if s > 0 else arr
+        xgb_imp = np.mean([m.feature_importances_ for m in ensemble.xgb_models], axis=0)
+        cat_imp = np.mean([m.get_feature_importance() for m in ensemble.cat_models], axis=0)
+        lgb_imp = np.mean([m.feature_importances_ for m in ensemble.lgb_models], axis=0)
+        combined_imp = (_norm(xgb_imp) + _norm(cat_imp) + _norm(lgb_imp)) / 3
+        imp_df = pd.DataFrame({"feature": feature_names, "importance": combined_imp})
+        imp_df = imp_df.sort_values("importance", ascending=False)
+        imp_df.to_csv(os.path.join(output_dir, "feature_importance.csv"), index=False)
+        print("  三模型平均特徵重要性 → feature_importance.csv")
+        print("  Top 10 特徵：")
+        for _, row in imp_df.head(10).iterrows():
+            print(f"    {row['feature']:<35} {row['importance']:.4f}")
+    except Exception as e:
+        print(f"  [注意] 特徵重要性輸出失敗：{e}")
 
     # ── Step 8：個體報告 ─────────────────────────
     print("\n" + "="*55)
