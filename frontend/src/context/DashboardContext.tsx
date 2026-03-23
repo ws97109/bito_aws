@@ -1,9 +1,11 @@
 import React, { createContext, useContext, useReducer, useCallback } from 'react';
-import type { DashboardState, StatsResponse, FraudNode, SubgraphResponse, NodeDetailResponse } from '../types/index';
+import type { DashboardState, StatsResponse, FraudNode, SubgraphResponse, NodeDetailResponse, FpFnNode, DashboardMode, FpFnMode, ShapWaterfallResponse } from '../types/index';
 import { getStats } from '../api/statsApi';
 import { getFraudNodes } from '../api/fraudNodesApi';
 import { getSubgraph } from '../api/subgraphApi';
 import { getNodeDetail } from '../api/nodeApi';
+import { getFpFnNodes } from '../api/fpFnApi';
+import { getShapWaterfall } from '../api/shapApi';
 
 // ── Action Types ──────────────────────────────────────────────────────────────
 
@@ -20,7 +22,15 @@ type Action =
   | { type: 'SET_SUBGRAPH_ERROR'; error: string }
   | { type: 'SET_NODE_DETAIL_LOADING' }
   | { type: 'SET_NODE_DETAIL_SUCCESS'; data: NodeDetailResponse }
-  | { type: 'SET_NODE_DETAIL_ERROR'; error: string };
+  | { type: 'SET_NODE_DETAIL_ERROR'; error: string }
+  | { type: 'SET_DASHBOARD_MODE'; mode: DashboardMode }
+  | { type: 'SET_FPFN_MODE'; mode: FpFnMode }
+  | { type: 'SET_FPFN_NODES_LOADING' }
+  | { type: 'SET_FPFN_NODES_SUCCESS'; fp: FpFnNode[]; fn: FpFnNode[] }
+  | { type: 'SET_FPFN_NODES_ERROR'; error: string }
+  | { type: 'SET_SHAP_LOADING' }
+  | { type: 'SET_SHAP_SUCCESS'; data: ShapWaterfallResponse }
+  | { type: 'SET_SHAP_ERROR'; error: string };
 
 // ── Initial State ─────────────────────────────────────────────────────────────
 
@@ -31,8 +41,13 @@ const initialState: DashboardState = {
   subgraph: null,
   selectedNode: null,
   subgraphCache: new Map(),
-  loading: { stats: false, fraudNodes: false, subgraph: false, nodeDetail: false },
-  error: { stats: null, fraudNodes: null, subgraph: null, nodeDetail: null },
+  dashboardMode: 'fraud',
+  fpFnMode: 'fp',
+  fpNodes: [],
+  fnNodes: [],
+  shapWaterfall: null,
+  loading: { stats: false, fraudNodes: false, subgraph: false, nodeDetail: false, fpFnNodes: false, shapWaterfall: false },
+  error: { stats: null, fraudNodes: null, subgraph: null, nodeDetail: null, fpFnNodes: null, shapWaterfall: null },
 };
 
 // ── Reducer ───────────────────────────────────────────────────────────────────
@@ -83,6 +98,25 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
     case 'SET_NODE_DETAIL_ERROR':
       return { ...state, loading: { ...state.loading, nodeDetail: false }, error: { ...state.error, nodeDetail: action.error } };
 
+    case 'SET_DASHBOARD_MODE':
+      return { ...state, dashboardMode: action.mode, selectedUserId: null, subgraph: null, selectedNode: null };
+    case 'SET_FPFN_MODE':
+      return { ...state, fpFnMode: action.mode, selectedUserId: null, subgraph: null, selectedNode: null };
+
+    case 'SET_FPFN_NODES_LOADING':
+      return { ...state, loading: { ...state.loading, fpFnNodes: true }, error: { ...state.error, fpFnNodes: null } };
+    case 'SET_FPFN_NODES_SUCCESS':
+      return { ...state, fpNodes: action.fp, fnNodes: action.fn, loading: { ...state.loading, fpFnNodes: false } };
+    case 'SET_FPFN_NODES_ERROR':
+      return { ...state, loading: { ...state.loading, fpFnNodes: false }, error: { ...state.error, fpFnNodes: action.error } };
+
+    case 'SET_SHAP_LOADING':
+      return { ...state, loading: { ...state.loading, shapWaterfall: true }, error: { ...state.error, shapWaterfall: null } };
+    case 'SET_SHAP_SUCCESS':
+      return { ...state, shapWaterfall: action.data, loading: { ...state.loading, shapWaterfall: false } };
+    case 'SET_SHAP_ERROR':
+      return { ...state, loading: { ...state.loading, shapWaterfall: false }, error: { ...state.error, shapWaterfall: action.error } };
+
     default:
       return state;
   }
@@ -97,6 +131,8 @@ interface DashboardContextValue {
   loadFraudNodes: () => Promise<void>;
   loadSubgraph: (userId: number, hops?: number) => Promise<void>;
   loadNodeDetail: (userId: number) => Promise<void>;
+  loadFpFnNodes: () => Promise<void>;
+  loadShapWaterfall: (mode: FpFnMode, userId?: number) => Promise<void>;
 }
 
 export const DashboardContext = createContext<DashboardContextValue | null>(null);
@@ -146,8 +182,28 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const loadFpFnNodes = useCallback(async () => {
+    dispatch({ type: 'SET_FPFN_NODES_LOADING' });
+    try {
+      const { fp, fn } = await getFpFnNodes();
+      dispatch({ type: 'SET_FPFN_NODES_SUCCESS', fp, fn });
+    } catch (err) {
+      dispatch({ type: 'SET_FPFN_NODES_ERROR', error: err instanceof Error ? err.message : 'Failed to load FP/FN nodes' });
+    }
+  }, []);
+
+  const loadShapWaterfall = useCallback(async (mode: FpFnMode, userId?: number) => {
+    dispatch({ type: 'SET_SHAP_LOADING' });
+    try {
+      const data = await getShapWaterfall(mode, userId);
+      dispatch({ type: 'SET_SHAP_SUCCESS', data });
+    } catch (err) {
+      dispatch({ type: 'SET_SHAP_ERROR', error: err instanceof Error ? err.message : 'Failed to load SHAP data' });
+    }
+  }, []);
+
   return (
-    <DashboardContext.Provider value={{ state, dispatch, loadStats, loadFraudNodes, loadSubgraph, loadNodeDetail }}>
+    <DashboardContext.Provider value={{ state, dispatch, loadStats, loadFraudNodes, loadSubgraph, loadNodeDetail, loadFpFnNodes, loadShapWaterfall }}>
       {children}
     </DashboardContext.Provider>
   );

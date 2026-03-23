@@ -3,6 +3,7 @@ import { useDashboard } from '../../context/DashboardContext';
 import { useFraudNodes } from '../../hooks/useFraudNodes';
 import type { FraudNode } from '../../types/index';
 import { Spinner } from '../common/Spinner';
+import { hasGraphData } from '../../utils/graphDataStore';
 
 export function getFilteredNodes(nodes: FraudNode[], keyword: string): FraudNode[] {
   return nodes.filter(n => n.risk_score >= 0.5 && String(n.user_id).includes(keyword.trim()));
@@ -84,9 +85,12 @@ export function NodeSelector() {
                                   : 'border-l-2 border-transparent hover:bg-slate-700/40'}`}
                   >
                     <div className="flex justify-between items-center">
-                      <span className="font-semibold text-sky-400 text-xs">
+                      <span className="font-semibold text-sky-400 text-xs flex items-center gap-1.5">
                         ID: {n.user_id}
-                        <span className="text-slate-500 font-normal ml-2">{n.risk_score.toFixed(3)}</span>
+                        <span className="text-slate-500 font-normal">{n.risk_score.toFixed(3)}</span>
+                        {hasGraphData(n.user_id)
+                          ? <span title="有圖形資料" className="text-emerald-400 text-[10px]">&#9679;</span>
+                          : <span title="無圖形資料" className="text-slate-600 text-[10px]">&#9675;</span>}
                       </span>
                       <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${badge.cls}`}>
                         {badge.label} {(n.risk_score * 100).toFixed(0)}%
