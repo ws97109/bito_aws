@@ -35,14 +35,14 @@ function WaterfallChart({ features, baseValue }: WaterfallChartProps) {
   const xLo = xMin - xPad;
   const xHi = xMax + xPad;
 
-  // Layout constants — compact sizing
-  const ROW_H   = 26;
-  const BAR_H   = 14;
-  const LABEL_W = 150;
-  const TOTAL_W = 500;
+  // Layout constants
+  const ROW_H   = 22;
+  const BAR_H   = 12;
+  const LABEL_W = 160;
+  const TOTAL_W = 560;
   const BAR_AREA = TOTAL_W - LABEL_W - 6;
-  const PAD_T   = 22;
-  const PAD_B   = 22;
+  const PAD_T   = 20;
+  const PAD_B   = 20;
   const TOTAL_H = rows.length * ROW_H + PAD_T + PAD_B;
 
   const toX = (v: number) => LABEL_W + ((v - xLo) / (xHi - xLo)) * BAR_AREA;
