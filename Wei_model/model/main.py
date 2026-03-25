@@ -607,18 +607,8 @@ def main(
               f"{row['percentage']:>6.2f}% {row['cumulative_pct']:>6.2f}%")
     print(f"\n  已存至：shap_all_features.csv")
 
-    # ── Step 7.5：儲存每個 test user 的 SHAP 值 + 分群 Excel ──
-    print("\n" + "="*55)
-    print("[Step 7.5] 儲存 SHAP 值矩陣 & 產生分群 SHAP Excel")
-    print("="*55)
-
-    # 建立 SHAP 值 DataFrame（每列一個 test user，每欄一個特徵）
-    shap_df = pd.DataFrame(explainer.shap_values, columns=feature_names)
-    shap_df.insert(0, "user_id", feat_df.index[idx_te])
-    shap_df.to_csv(os.path.join(output_dir, "shap_values_test.csv"), index=False)
-    print(f"  SHAP 值矩陣已儲存：shap_values_test.csv ({len(shap_df)} 筆)")
-
-    # 分群 Excel：每個 user 只保留 SHAP 絕對值 Top 10，其餘 None
+    # ── Step 7.5：（暫存驗證集 SHAP，全量 SHAP 在 Step 12 統一產出）──
+    # 保留 build_top10_shap_sheet 函式供後續使用
     def build_top10_shap_sheet(user_ids, shap_matrix, feat_names):
         rows = []
         for i, uid in enumerate(user_ids):
@@ -629,29 +619,6 @@ def main(
                 row[fname] = float(sv[j]) if j in top10_idx else None
             rows.append(row)
         return pd.DataFrame(rows)
-
-    # 分群
-    te_user_ids = feat_df.index[idx_te]
-    te_pred = (y_proba >= optimal_t).astype(int)
-
-    black_mask = te_pred == 1
-    fp_mask    = (y_te == 0) & (te_pred == 1)
-    fn_mask    = (y_te == 1) & (te_pred == 0)
-
-    shap_vals = explainer.shap_values
-
-    sheet_black = build_top10_shap_sheet(te_user_ids[black_mask], shap_vals[black_mask], feature_names)
-    sheet_fp    = build_top10_shap_sheet(te_user_ids[fp_mask],    shap_vals[fp_mask],    feature_names)
-    sheet_fn    = build_top10_shap_sheet(te_user_ids[fn_mask],    shap_vals[fn_mask],    feature_names)
-
-    shap_excel_path = os.path.join(output_dir, "shap_top10_by_group.xlsx")
-    with pd.ExcelWriter(shap_excel_path, engine="openpyxl") as writer:
-        sheet_black.to_excel(writer, sheet_name="黑名單_SHAP", index=False)
-        sheet_fp.to_excel(writer, sheet_name="FP_白預測成黑_SHAP", index=False)
-        sheet_fn.to_excel(writer, sheet_name="FN_黑預測成白_SHAP", index=False)
-
-    print(f"  分群 SHAP Excel 已儲存：shap_top10_by_group.xlsx")
-    print(f"    黑名單: {len(sheet_black)} 筆, FP: {len(sheet_fp)} 筆, FN: {len(sheet_fn)} 筆")
 
     # ── Step 8：個體報告 ─────────────────────────
     print("\n" + "="*55)
@@ -823,6 +790,38 @@ def main(
             bar = "█" * min(int(cnt / len(pred_proba) * 50), 45)
             print(f"    {label:<6}  {cnt:>6}  {bar}")
 
+        # ── Step 10.1：合併全量風險評分（train + predict = 63,770） ──
+        print("\n" + "="*55)
+        print("[Step 10.1] 合併全量風險評分 → all_user_risk_scores.xlsx")
+        print("="*55)
+
+        pred_risk_df = pd.DataFrame({
+            "user_id":    pred_feat.index,
+            "true_label": np.nan,
+            "risk_score": pred_proba,
+            "predicted_blacklist": pred_labels,
+            "data_source": "predict",
+        })
+        pred_risk_df["risk_level"] = pd.cut(
+            pred_risk_df["risk_score"],
+            bins=[-0.001, 0.2, 0.4, 0.6, 0.8, 1.001],
+            labels=["正常", "低風險", "中風險", "高風險", "極高風險"],
+        )
+
+        train_risk_df = result_df.copy()
+        train_risk_df["data_source"] = "train"
+
+        all_risk_df = pd.concat([train_risk_df, pred_risk_df], ignore_index=True)
+        all_risk_df = all_risk_df.sort_values("risk_score", ascending=False)
+
+        all_risk_xlsx_path = os.path.join(output_dir, "all_user_risk_scores.xlsx")
+        all_risk_df.to_excel(all_risk_xlsx_path, sheet_name="所有用戶風險分數", index=False)
+
+        print(f"  Train 用戶: {len(train_risk_df):,}")
+        print(f"  Predict 用戶: {len(pred_risk_df):,}")
+        print(f"  合計: {len(all_risk_df):,}")
+        print(f"  已儲存: all_user_risk_scores.xlsx")
+
         # ── Step 10.5：Predict 高風險用戶可解釋性分析 ──
         print("\n" + "="*55)
         print("[Step 10.5] Predict 高風險用戶 SHAP 解釋 + Waterfall + 報告")
@@ -922,6 +921,140 @@ def main(
         output_dir=output_dir,
     )
 
+    # ── Step 12：全量 SHAP 可解釋性（train + predict 全部用戶）──────
+    print("\n" + "="*55)
+    print("[Step 12] 全量 SHAP 可解釋性分析（train + predict = 全部用戶）")
+    print("="*55)
+
+    # 合併全量特徵矩陣和 user_id
+    if pred_tables is not None:
+        X_all_combined = np.vstack([X_all, X_pred])
+        all_user_ids   = np.concatenate([feat_df.index.values, pred_feat.index.values])
+        all_labels     = np.concatenate([y, np.full(len(pred_proba), np.nan)])
+        all_scores     = np.concatenate([all_proba, pred_proba])
+        all_pred_labels = np.concatenate([
+            (all_proba >= optimal_t).astype(int),
+            pred_labels,
+        ])
+        all_sources    = np.array(["train"] * len(y) + ["predict"] * len(pred_proba))
+    else:
+        X_all_combined = X_all
+        all_user_ids   = feat_df.index.values
+        all_labels     = y.astype(float)
+        all_scores     = all_proba
+        all_pred_labels = (all_proba >= optimal_t).astype(int)
+        all_sources    = np.array(["train"] * len(y))
+
+    print(f"  全量用戶數: {len(all_user_ids):,}")
+    print(f"  計算 SHAP 值中（這可能需要幾分鐘）...")
+
+    # 全量 SHAP 計算
+    all_explainer = SHAPExplainer(ensemble.xgb_model, feature_names)
+    X_all_scaled  = ensemble.scaler.transform(X_all_combined)
+    bg_n          = min(200, len(X_te_scaled))
+    all_explainer.fit(X_te_scaled[:bg_n], X_all_scaled)
+
+    print(f"  SHAP 計算完成！")
+
+    # 12.1：儲存 shap_values_all.csv（全量）
+    shap_all_df = pd.DataFrame(all_explainer.shap_values, columns=feature_names)
+    shap_all_df.insert(0, "user_id", all_user_ids)
+    shap_all_df.to_csv(os.path.join(output_dir, "shap_values_all.csv"), index=False)
+    print(f"  shap_values_all.csv: {len(shap_all_df):,} 筆")
+
+    # 12.2：blacklist_analysis.xlsx
+    print(f"\n  產出 blacklist_analysis.xlsx ...")
+
+    # 驗證集分群（有 true_label）
+    te_user_ids  = feat_df.index[idx_te]
+    te_pred_lbl  = (y_proba >= optimal_t).astype(int)
+    te_shap_vals = all_explainer.shap_values[:len(y)][idx_te]
+
+    black_mask_te = (y_te == 1)
+    fp_mask_te    = (y_te == 0) & (te_pred_lbl == 1)
+    fn_mask_te    = (y_te == 1) & (te_pred_lbl == 0)
+
+    def build_blacklist_sheet(user_ids, scores, shap_matrix, feat_names):
+        """建立含 risk_score + SHAP Top-10 的 sheet"""
+        rows = []
+        for i, uid in enumerate(user_ids):
+            sv = shap_matrix[i]
+            top10_idx = np.argsort(np.abs(sv))[-10:]
+            row = {"user_id": uid, "risk_score": float(scores[i])}
+            for j, fname in enumerate(feat_names):
+                row[fname] = float(sv[j]) if j in top10_idx else None
+            rows.append(row)
+        return pd.DataFrame(rows)
+
+    te_scores = y_proba
+
+    sheet_black = build_blacklist_sheet(
+        te_user_ids[black_mask_te], te_scores[black_mask_te],
+        te_shap_vals[black_mask_te], feature_names)
+    sheet_fp = build_blacklist_sheet(
+        te_user_ids[fp_mask_te], te_scores[fp_mask_te],
+        te_shap_vals[fp_mask_te], feature_names)
+    sheet_fn = build_blacklist_sheet(
+        te_user_ids[fn_mask_te], te_scores[fn_mask_te],
+        te_shap_vals[fn_mask_te], feature_names)
+
+    bl_excel_path = os.path.join(output_dir, "blacklist_analysis.xlsx")
+    sheets = {
+        "黑名單": sheet_black,
+        "FP_白預測成黑": sheet_fp,
+        "FN_黑預測成白": sheet_fn,
+    }
+
+    # Predict 用戶預測黑名單
+    if pred_tables is not None:
+        pred_shap_vals = all_explainer.shap_values[len(y):]
+        pred_black_mask = pred_labels == 1
+
+        if pred_black_mask.sum() > 0:
+            sheet_pred_black = build_blacklist_sheet(
+                pred_feat.index[pred_black_mask], pred_proba[pred_black_mask],
+                pred_shap_vals[pred_black_mask], feature_names)
+            sheets["Predict_預測黑名單"] = sheet_pred_black
+
+    with pd.ExcelWriter(bl_excel_path, engine="openpyxl") as writer:
+        for sheet_name, sheet_df in sheets.items():
+            sheet_df.to_excel(writer, sheet_name=sheet_name, index=False)
+
+    print(f"  blacklist_analysis.xlsx:")
+    for sname, sdf in sheets.items():
+        print(f"    [{sname}]: {len(sdf)} 筆")
+
+    # 12.3：shap_top10_by_group.xlsx
+    print(f"\n  產出 shap_top10_by_group.xlsx ...")
+
+    sheet_black_shap = build_top10_shap_sheet(
+        te_user_ids[black_mask_te], te_shap_vals[black_mask_te], feature_names)
+    sheet_fp_shap = build_top10_shap_sheet(
+        te_user_ids[fp_mask_te], te_shap_vals[fp_mask_te], feature_names)
+    sheet_fn_shap = build_top10_shap_sheet(
+        te_user_ids[fn_mask_te], te_shap_vals[fn_mask_te], feature_names)
+
+    shap_sheets = {
+        "黑名單_SHAP": sheet_black_shap,
+        "FP_白預測成黑_SHAP": sheet_fp_shap,
+        "FN_黑預測成白_SHAP": sheet_fn_shap,
+    }
+
+    if pred_tables is not None:
+        if pred_black_mask.sum() > 0:
+            sheet_pred_shap = build_top10_shap_sheet(
+                pred_feat.index[pred_black_mask], pred_shap_vals[pred_black_mask], feature_names)
+            shap_sheets["Predict_預測黑名單_SHAP"] = sheet_pred_shap
+
+    shap_excel_path = os.path.join(output_dir, "shap_top10_by_group.xlsx")
+    with pd.ExcelWriter(shap_excel_path, engine="openpyxl") as writer:
+        for sheet_name, sheet_df in shap_sheets.items():
+            sheet_df.to_excel(writer, sheet_name=sheet_name, index=False)
+
+    print(f"  shap_top10_by_group.xlsx:")
+    for sname, sdf in shap_sheets.items():
+        print(f"    [{sname}]: {len(sdf)} 筆")
+
     # ── 完成 ─────────────────────────────────────
     out = os.path.abspath(output_dir)
     print(f"\n{'='*55}")
@@ -931,11 +1064,16 @@ def main(
     print(f"  features.csv                    篩選後特徵矩陣 + 異常分數")
     print(f"  feature_selection_report.json    特徵篩選報告")
     print(f"  metrics.json                    評估指標")
-    print(f"  user_risk_scores.csv            全量風險評分")
+    print(f"  user_risk_scores.csv            全量風險評分（train）")
+    print(f"  all_user_risk_scores.xlsx       ★ 全量風險評分（train+predict {len(all_user_ids):,} 人）")
     print(f"  test_predictions.csv            測試集預測結果")
     print(f"  submission.csv                  ★ 比賽提交檔案")
-    print(f"  predict_detail.csv              Predict 詳細機率")
-    print(f"  shap_global.png                 特徵重要性圖（train）")
+    n_pred = len(pred_proba) if pred_tables is not None else 0
+    print(f"  predict_detail.csv              Predict 詳細機率（{n_pred:,} 人）")
+    print(f"  shap_global.png                 特徵重要性圖")
+    print(f"  shap_values_all.csv             ★ 全量 SHAP 值（{len(all_user_ids):,} 人）")
+    print(f"  blacklist_analysis.xlsx          ★ 黑名單分析（含 Predict 預測黑名單）")
+    print(f"  shap_top10_by_group.xlsx         ★ 分群 SHAP Top-10（含 Predict）")
     print(f"  risk_reports.txt                高風險個體報告（train）")
     print(f"  waterfall/                      Waterfall 圖（train Top 5）")
     print(f"  ssr_results.json                SSR 穩定性數據")
