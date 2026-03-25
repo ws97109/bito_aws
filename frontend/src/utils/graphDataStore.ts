@@ -4,10 +4,11 @@
  * CSV files (served by Vite plugin at /output/<file>.csv):
  *   gnn_node_list.csv   → node_id, node_type, risk_score, label
  *   gnn_edge_list.csv   → source, target, source_raw, target_raw, edge_type
- *   blacklist_analysis.csv → user_id, risk_score  (fraud detection / blacklist)
- *   black_to_white.csv  → user_id, risk_score  (FP: predicted fraud, actually normal)
- *   white_to_black.csv  → user_id, risk_score  (FN: predicted normal, actually fraud)
- *   features.csv        → user_id + 60+ feature columns (real feature values per user)
+ *   blacklist_analysis.csv → user_id, risk_score  (confirmed blacklist, 黑名單 sheet, 328 rows)
+ *   black_to_white.csv  → user_id, risk_score  (FP: 白預測成黑, 286 rows)
+ *   white_to_black.csv  → user_id, risk_score  (FN: 黑預測成白, 193 rows)
+ *   features.csv        → user_id + feature columns (from predict_detail.csv, 12,753 rows)
+ *   shap_values.csv     → user_id + SHAP columns, top-10 non-null per user (63,770 rows)
  *
  * Edge-type → relation mapping:
  *   user_transfers_user → R2 (加密貨幣內轉)
@@ -57,6 +58,9 @@ let fnCache: FpFnNode[] | null = null;
 
 // features.csv: user_id → Record<feature_name, raw_string_value>
 let featuresMap: Map<number, Record<string, string>> | null = null;
+
+// shap_values.csv: user_id → Record<feature_name, shap_float_string> (empty string = null/not in top-10)
+let shapMap: Map<number, Record<string, string>> | null = null;
 
 // ── Loaders ───────────────────────────────────────────────────────────────────
 
@@ -148,46 +152,54 @@ async function loadFeaturesData(): Promise<void> {
   featuresMap = fm;
 }
 
-// Priority features with weights for contribution approximation
-const SHAP_FEATURE_CONFIG: Array<{ key: string; label: string; weight: number }> = [
-  { key: 'composite_risk_score',  label: '綜合風險分數',       weight:  0.50 },
-  { key: 'ip_unique_count',       label: '共用 IP 節點數',     weight:  0.001 },
-  { key: 'crypto_wit_count',      label: '加密提幣次數',       weight:  0.02 },
-  { key: 'twd_wit_sum',           label: '台幣提款總額',       weight:  0.000001 },
-  { key: 'twd_wit_count',         label: '台幣提款次數',       weight:  0.015 },
-  { key: 'account_age_days',      label: '帳戶年齡（天）',     weight: -0.0005 },
-  { key: 'is_high_risk_career',   label: '高風險職業',         weight:  0.18 },
-  { key: 'crypto_dep_sum',        label: '加密入金總額',       weight:  0.000001 },
-  { key: 'twd_smurf_flag',        label: '台幣分散提款標記',   weight:  0.30 },
-  { key: 'withdraw_velocity',     label: '提款速度',           weight:  0.04 },
-];
+async function loadShapData(): Promise<void> {
+  if (shapMap !== null) return;
+  const text = await fetchCsv('/output/shap_values.csv');
+  const records = parseCsvRecords(text);
+  const sm = new Map<number, Record<string, string>>();
+  for (const row of records) {
+    const uid = parseInt(row['user_id'] ?? '', 10);
+    if (!isNaN(uid)) sm.set(uid, row);
+  }
+  shapMap = sm;
+}
 
 export async function getShapForUser(
   mode: 'fp' | 'fn' | 'blacklist',
   userId?: number,
 ): Promise<ShapWaterfallResponse> {
-  await loadFeaturesData();
+  await Promise.all([loadFeaturesData(), loadShapData()]);
 
   const shapMode: 'fp' | 'fn' = mode === 'fn' ? 'fn' : 'fp';
 
-  if (userId != null && featuresMap !== null) {
-    const row = featuresMap.get(userId);
-    if (row) {
-      const features: ShapWaterfallFeature[] = SHAP_FEATURE_CONFIG.map(cfg => {
-        const raw = row[cfg.key] ?? '0';
-        const numVal = parseFloat(raw) || 0;
-        const contribution = parseFloat((numVal * cfg.weight).toFixed(3));
-        return {
-          feature_name: cfg.label,
-          feature_value: raw,
+  if (userId != null && shapMap !== null) {
+    const shapRow = shapMap.get(userId);
+    if (shapRow) {
+      const featureRow = featuresMap?.get(userId) ?? {};
+
+      // Collect non-empty SHAP columns (these are the top-10 features for this user)
+      const features: ShapWaterfallFeature[] = [];
+      for (const [colName, shapVal] of Object.entries(shapRow)) {
+        if (colName === 'user_id' || shapVal === '' || shapVal == null) continue;
+        const contribution = parseFloat(shapVal);
+        if (isNaN(contribution)) continue;
+        const featureValue = featureRow[colName] ?? '';
+        features.push({
+          feature_name: colName,
           contribution,
-        };
-      });
+          feature_value: featureValue,
+        });
+      }
+
+      // Sort by absolute SHAP value descending, take top 10
+      features.sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution));
+      const top10 = features.slice(0, 10);
+
       return {
         mode: shapMode,
         user_id: userId,
         base_value: -2.885,
-        features,
+        features: top10,
       };
     }
   }
@@ -252,13 +264,6 @@ export async function getBlacklistNodes(): Promise<FraudNode[]> {
     const uid = parseInt(r['user_id'] ?? '0', 10);
     const score = parseFloat(r['risk_score'] ?? '0');
     if (!isNaN(uid)) blacklistMap.set(uid, score);
-  }
-
-  // Merge with gnn_node_list fraud nodes (label=1) so graph nodes are always searchable
-  for (const rec of nodeMap!.values()) {
-    if (rec.nodeType === 'user' && rec.label >= 1.0 && !blacklistMap.has(rec.numericId)) {
-      blacklistMap.set(rec.numericId, rec.riskScore);
-    }
   }
 
   blacklistCache = Array.from(blacklistMap.entries())
@@ -352,6 +357,8 @@ export async function getComputedSubgraph(userId: number, hops: number = 2): Pro
   for (const nodeId of visitedNodes) {
     const rec = nm.get(nodeId);
     if (!rec) continue;
+    // Always include center node and wallets; filter user nodes below risk threshold
+    if (rec.nodeType === 'user' && rec.numericId !== userId && rec.riskScore < 0.5) continue;
     resultNodes.push({
       user_id: rec.numericId,
       risk_score: rec.riskScore,
