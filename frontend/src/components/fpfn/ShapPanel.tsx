@@ -14,7 +14,7 @@ function WaterfallChart({ features, baseValue }: WaterfallChartProps) {
   // Sort by |contribution| desc, cap at 8 rows for readability
   const sorted = [...features]
     .sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution))
-    .slice(0, 8);
+    .slice(0, 10);
 
   const finalValue = baseValue + sorted.reduce((s, f) => s + f.contribution, 0);
 

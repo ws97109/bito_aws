@@ -35,7 +35,7 @@ export function NodeDetailPanel() {
 
   const { user_id, risk_score, status, account_age_days, shap_features, neighbor_counts } = selectedNode;
   const isFraud = status === 1;
-  const maxShap = Math.max(...shap_features.slice(0, 3).map(f => Math.abs(f.contribution)), 0.001);
+  const maxShap = Math.max(...shap_features.slice(0, 10).map(f => Math.abs(f.contribution)), 0.001);
 
   return (
     <div className="space-y-4">
@@ -77,13 +77,13 @@ export function NodeDetailPanel() {
       <div>
         <h4 className="text-xs uppercase tracking-wider text-slate-400 mb-2 flex items-center gap-1.5">
           <span className="w-0.5 h-3.5 bg-sky-500 rounded-full inline-block"></span>
-          SHAP Top-3 特徵貢獻
+          SHAP Top-10 特徵貢獻
         </h4>
         {shap_features.length === 0 ? (
           <p className="text-xs text-slate-400">SHAP 資料不可用</p>
         ) : (
           <div className="space-y-1.5">
-            {shap_features.slice(0, 3).map((f, i) => (
+            {shap_features.slice(0, 10).map((f, i) => (
               <div key={i} className="relative overflow-hidden bg-slate-700/30 rounded-md p-2.5">
                 {/* Magnitude bar */}
                 <div
@@ -109,9 +109,9 @@ export function NodeDetailPanel() {
           鄰居數量
         </h4>
         <div className="flex gap-2">
-          <span className="bg-sky-900/40 text-sky-300 rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-sky-500/30">R1 · {neighbor_counts.r1}</span>
-          <span className="bg-amber-900/40 text-amber-300 rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-amber-500/30">R2 · {neighbor_counts.r2}</span>
-          <span className="bg-emerald-900/40 text-emerald-300 rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-emerald-500/30">R3 · {neighbor_counts.r3}</span>
+          <span className="bg-sky-900/40 text-sky-300 rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-sky-500/30">錢包→帳戶 · {neighbor_counts.r1}</span>
+          <span className="bg-amber-900/40 text-amber-300 rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-amber-500/30">帳戶→帳戶 · {neighbor_counts.r2}</span>
+          <span className="bg-emerald-900/40 text-emerald-300 rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-emerald-500/30">帳戶→錢包 · {neighbor_counts.r3}</span>
         </div>
       </div>
 

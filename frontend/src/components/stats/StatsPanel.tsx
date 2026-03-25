@@ -1,14 +1,17 @@
 import { useStats } from '../../hooks/useStats';
 import { useDashboard } from '../../context/DashboardContext';
+import { useFraudNodes } from '../../hooks/useFraudNodes';
 import { Spinner } from '../common/Spinner';
 import { ErrorMessage } from '../common/ErrorMessage';
 import { StatCard } from './StatCard';
 import { RiskBarChart } from './RiskBarChart';
 import { RelationStats } from './RelationStats';
+import { RiskNodeList } from './RiskNodeList';
 
 export function StatsPanel() {
   const { stats, loading, error } = useStats();
   const { loadStats } = useDashboard();
+  const { fraudNodes } = useFraudNodes();
 
   if (loading && !stats) return <Spinner />;
   if (error) return <ErrorMessage message={error} onRetry={loadStats} />;
@@ -34,6 +37,10 @@ export function StatsPanel() {
 
       <div className="bg-slate-800/40 rounded-lg p-3 ring-1 ring-slate-700/50">
         <RelationStats counts={stats.relation_counts} />
+      </div>
+
+      <div className="bg-slate-800/40 rounded-lg p-3 ring-1 ring-slate-700/50">
+        <RiskNodeList nodes={fraudNodes} />
       </div>
     </div>
   );

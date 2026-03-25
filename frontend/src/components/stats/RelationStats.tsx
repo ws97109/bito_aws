@@ -6,9 +6,9 @@ interface RelationStatsProps {
 
 export function RelationStats({ counts }: RelationStatsProps) {
   const relations = [
-    { key: 'R1', label: '共用 IP',      value: counts.r1, dotColor: 'bg-sky-500',     barColor: 'bg-sky-500/30',     textColor: 'text-sky-300' },
-    { key: 'R2', label: '加密貨幣內轉', value: counts.r2, dotColor: 'bg-amber-500',   barColor: 'bg-amber-500/30',   textColor: 'text-amber-300' },
-    { key: 'R3', label: '共用錢包',     value: counts.r3, dotColor: 'bg-emerald-500', barColor: 'bg-emerald-500/30', textColor: 'text-emerald-300' },
+    { key: 'R1', label: '錢包→帳戶', value: counts.r1, dotColor: 'bg-sky-500',     barColor: 'bg-sky-500/30',     textColor: 'text-sky-300' },
+    { key: 'R2', label: '帳戶→帳戶', value: counts.r2, dotColor: 'bg-amber-500',   barColor: 'bg-amber-500/30',   textColor: 'text-amber-300' },
+    { key: 'R3', label: '帳戶→錢包', value: counts.r3, dotColor: 'bg-emerald-500', barColor: 'bg-emerald-500/30', textColor: 'text-emerald-300' },
   ];
 
   const maxVal = Math.max(...relations.map(r => r.value));
