@@ -88,7 +88,15 @@ export interface FpFnNode {
   predicted_status: 0 | 1;
 }
 
-export type DashboardMode = 'fraud' | 'fp-fn';
+// ── Predict node types ───────────────────────────────────────────────────────
+export interface PredictNode {
+  user_id: number;
+  risk_score: number;
+  is_blacklist: 0 | 1;
+  shap_features: ShapFeature[];  // top-10 SHAP from predict_detail.csv
+}
+
+export type DashboardMode = 'fraud' | 'fp-fn' | 'predict';
 export type FpFnMode = 'fp' | 'fn';
 
 // Global dashboard state (DashboardContext)
@@ -103,6 +111,7 @@ export interface DashboardState {
   fpFnMode: FpFnMode;
   fpNodes: FpFnNode[];
   fnNodes: FpFnNode[];
+  predictNodes: PredictNode[];
   shapWaterfall: ShapWaterfallResponse | null;
   loading: {
     stats: boolean;
@@ -110,6 +119,7 @@ export interface DashboardState {
     subgraph: boolean;
     nodeDetail: boolean;
     fpFnNodes: boolean;
+    predictNodes: boolean;
     shapWaterfall: boolean;
   };
   error: {
@@ -118,6 +128,7 @@ export interface DashboardState {
     subgraph: string | null;
     nodeDetail: string | null;
     fpFnNodes: string | null;
+    predictNodes: string | null;
     shapWaterfall: string | null;
   };
 }

@@ -4,12 +4,11 @@ import { Dashboard } from './components/layout/Dashboard';
 import { CryptoBackground } from './components/common/CryptoBackground';
 
 function AppContent() {
-  const { loadStats, loadFraudNodes, loadFpFnNodes } = useDashboard();
+  const { loadStats, loadFraudNodes, loadFpFnNodes, loadPredictNodes } = useDashboard();
 
   useEffect(() => {
-    // Parallel initial data load (Requirement 7.2)
-    Promise.all([loadStats(), loadFraudNodes(), loadFpFnNodes()]);
-  }, [loadStats, loadFraudNodes, loadFpFnNodes]);
+    Promise.all([loadStats(), loadFraudNodes(), loadFpFnNodes(), loadPredictNodes()]);
+  }, [loadStats, loadFraudNodes, loadFpFnNodes, loadPredictNodes]);
 
   return <Dashboard />;
 }

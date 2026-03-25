@@ -17,7 +17,122 @@
  */
 
 import { parseCsvRecords } from './csvParser';
-import type { StatsResponse, FraudNode, FpFnNode, SubgraphResponse, SubgraphNode, SubgraphEdge, NodeDetailResponse, ShapWaterfallResponse, ShapWaterfallFeature } from '../types/index';
+import type { StatsResponse, FraudNode, FpFnNode, PredictNode, SubgraphResponse, SubgraphNode, SubgraphEdge, NodeDetailResponse, ShapWaterfallResponse, ShapWaterfallFeature, ShapFeature } from '../types/index';
+
+// ── 特徵英文 → 中文對照表 ──────────────────────────────────────────────────────
+const FEATURE_NAME_ZH: Record<string, string> = {
+  // 用戶基本特徵
+  kyc_speed_sec:           'KYC 完成速度（秒）',
+  account_age_days:        '帳號年齡（天）',
+  age:                     '年齡',
+  is_female:               '是否女性',
+  is_high_risk_career:     '高風險職業',
+  is_high_risk_income:     '高風險收入來源',
+  career_income_risk:      '職業×收入組合風險',
+  career_freq:             '職業頻率',
+  is_app_user:             'APP 用戶',
+  reg_hour:                '註冊時間（時）',
+  reg_is_night:            '深夜註冊',
+  reg_is_weekend:          '週末註冊',
+  has_kyc_level2:          '已完成 KYC2',
+  kyc_gap_days:            'KYC 間隔（天）',
+  reg_to_kyc1_days:        '註冊到 KYC1（天）',
+  // 法幣行為
+  twd_dep_count:           '法幣入金次數',
+  twd_dep_sum:             '法幣入金總額',
+  twd_dep_mean:            '法幣入金均值',
+  twd_dep_std:             '法幣入金標準差',
+  twd_dep_max:             '法幣入金最大值',
+  twd_wit_count:           '法幣提領次數',
+  twd_wit_sum:             '法幣提領總額',
+  twd_wit_mean:            '法幣提領均值',
+  twd_wit_std:             '法幣提領標準差',
+  twd_wit_max:             '法幣提領最大值',
+  twd_net_flow:            '法幣淨流入',
+  twd_withdraw_ratio:      '提領/入金比',
+  twd_smurf_flag:          '結構化交易旗標',
+  twd_wit_ip_ratio:        '提領 IP 覆蓋率',
+  // 虛擬貨幣行為
+  crypto_dep_count:        '加密入金次數',
+  crypto_dep_sum:          '加密入金總額',
+  crypto_dep_mean:         '加密入金均值',
+  crypto_dep_max:          '加密入金最大值',
+  crypto_wit_count:        '加密提領次數',
+  crypto_wit_sum:          '加密提領總額',
+  crypto_wit_mean:         '加密提領均值',
+  crypto_wit_max:          '加密提領最大值',
+  crypto_currency_diversity:  '使用幣種數',
+  crypto_protocol_diversity:  '使用鏈協定數',
+  crypto_wallet_hash_nunique: '錢包地址數',
+  crypto_internal_count:      '內轉次數',
+  crypto_internal_peer_count: '內轉對象數',
+  crypto_external_wit_count:  '鏈上提領次數',
+  crypto_wit_ip_ratio:        '加密提領 IP 覆蓋率',
+  // 交易行為
+  trading_count:           '掛單成交次數',
+  trading_sum:             '掛單成交總額',
+  trading_mean:            '掛單成交均值',
+  trading_max:             '掛單成交最大值',
+  trading_buy_ratio:       '買單比率',
+  trading_market_order_ratio: '市價單比率',
+  swap_count:              '一鍵買賣次數',
+  swap_sum:                '一鍵買賣總額',
+  total_trading_volume:    '總交易量',
+  // IP 特徵
+  ip_unique_count:         '唯一 IP 數',
+  ip_total_count:          '總 IP 使用次數',
+  ip_night_ratio:          '深夜操作 IP 比率',
+  ip_max_shared:           'IP 最大共用人數',
+  // 資金停留
+  fund_stay_sec:           '資金停留時間（秒）',
+  // 圖特徵
+  pagerank_score:          'PageRank 分數',
+  graph_in_degree:         '圖入度',
+  graph_out_degree:        '圖出度',
+  connected_component_size: '連通分量大小',
+  betweenness_centrality:  '介數中心性',
+  // 跨表整合
+  total_tx_count:          '總交易筆數',
+  first_to_last_tx_days:   '首末交易間隔（天）',
+  weekend_tx_ratio:        '週末交易比率',
+  velocity_ratio_7d_vs_30d: '7天/30天交易加速比',
+  // 紅旗特徵
+  dep_to_first_wit_hours:  '入金到首次提領（時）',
+  twd_to_crypto_out_ratio: '法幣入/幣出比',
+  tx_amount_cv:            '交易金額變異係數',
+  rapid_kyc_then_trade:    'KYC 後 48h 交易',
+  crypto_out_in_ratio:     '加密出/入比',
+  same_day_in_out_count:   '同天入出金天數',
+  // 時序特徵
+  tx_interval_mean:        '交易間隔均值（秒）',
+  tx_interval_std:         '交易間隔標準差',
+  tx_interval_min:         '交易最短間隔（秒）',
+  tx_interval_median:      '交易間隔中位數',
+  tx_burst_count:          '交易爆發次數',
+  amount_p90_p10_ratio:    '金額 P90/P10 比',
+  active_days:             '活躍天數',
+  active_day_ratio:        '活躍天數比',
+  // 異常偵測分數
+  if_score:                '孤立森林分數',
+  hbos_score:              'HBOS 分數',
+  lof_score:               'LOF 分數',
+  // 複合分數
+  composite_risk_score:    '複合風險分數',
+  // GNN 嵌入
+  gnn_emb_0:  'GNN 嵌入 0',  gnn_emb_1:  'GNN 嵌入 1',
+  gnn_emb_2:  'GNN 嵌入 2',  gnn_emb_3:  'GNN 嵌入 3',
+  gnn_emb_4:  'GNN 嵌入 4',  gnn_emb_5:  'GNN 嵌入 5',
+  gnn_emb_6:  'GNN 嵌入 6',  gnn_emb_7:  'GNN 嵌入 7',
+  gnn_emb_8:  'GNN 嵌入 8',  gnn_emb_9:  'GNN 嵌入 9',
+  gnn_emb_10: 'GNN 嵌入 10', gnn_emb_11: 'GNN 嵌入 11',
+  gnn_emb_12: 'GNN 嵌入 12', gnn_emb_13: 'GNN 嵌入 13',
+  gnn_emb_14: 'GNN 嵌入 14', gnn_emb_15: 'GNN 嵌入 15',
+};
+
+/** 將英文特徵名轉為中文，找不到則回傳原名 */
+function zhFeatureName(eng: string): string {
+  return FEATURE_NAME_ZH[eng] ?? eng;
+}
 
 // ── Internal types ────────────────────────────────────────────────────────────
 
@@ -55,6 +170,7 @@ let allEdges: EdgeRecord[] | null = null;
 let blacklistCache: FraudNode[] | null = null;
 let fpCache: FpFnNode[] | null = null;
 let fnCache: FpFnNode[] | null = null;
+let predictCache: PredictNode[] | null = null;
 
 // features.csv: user_id → Record<feature_name, raw_string_value>
 let featuresMap: Map<number, Record<string, string>> | null = null;
@@ -185,7 +301,7 @@ export async function getShapForUser(
         if (isNaN(contribution)) continue;
         const featureValue = featureRow[colName] ?? '';
         features.push({
-          feature_name: colName,
+          feature_name: zhFeatureName(colName),
           contribution,
           feature_value: featureValue,
         });
@@ -204,7 +320,51 @@ export async function getShapForUser(
     }
   }
 
-  // Fall back to mock data
+  // Fall back: compute group average from real SHAP data
+  if (shapMap !== null && shapMap.size > 0) {
+    // Get relevant user IDs for this mode (FP or FN)
+    const relevantIds = new Set<number>();
+    if (shapMode === 'fp' && fpCache) {
+      fpCache.forEach(n => relevantIds.add(n.user_id));
+    } else if (shapMode === 'fn' && fnCache) {
+      fnCache.forEach(n => relevantIds.add(n.user_id));
+    }
+
+    // Aggregate SHAP values across group
+    const shapSums = new Map<string, { sum: number; count: number }>();
+    for (const [uid, row] of shapMap.entries()) {
+      if (relevantIds.size > 0 && !relevantIds.has(uid)) continue;
+      for (const [col, val] of Object.entries(row)) {
+        if (col === 'user_id' || val === '' || val == null) continue;
+        const num = parseFloat(val);
+        if (isNaN(num)) continue;
+        const entry = shapSums.get(col) ?? { sum: 0, count: 0 };
+        entry.sum += num;
+        entry.count++;
+        shapSums.set(col, entry);
+      }
+    }
+
+    const avgFeatures: ShapWaterfallFeature[] = [];
+    for (const [col, { sum, count }] of shapSums.entries()) {
+      if (count === 0) continue;
+      avgFeatures.push({
+        feature_name: zhFeatureName(col),
+        contribution: parseFloat((sum / count).toFixed(4)),
+        feature_value: '群體平均',
+      });
+    }
+    avgFeatures.sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution));
+
+    return {
+      mode: shapMode,
+      user_id: null,
+      base_value: -2.885,
+      features: avgFeatures.slice(0, 10),
+    };
+  }
+
+  // Last resort: mock
   const { mockFpShap, mockFnShap } = await import('../mock/shapData');
   return shapMode === 'fp' ? mockFpShap : mockFnShap;
 }
@@ -303,6 +463,44 @@ export async function getFpFnData(): Promise<{ fp: FpFnNode[]; fn: FpFnNode[] }>
   return { fp: fpCache, fn: fnCache };
 }
 
+export async function getPredictData(): Promise<PredictNode[]> {
+  if (predictCache) return predictCache;
+
+  const text = await fetchCsv('/output/predict_detail.csv');
+  const records = parseCsvRecords(text);
+
+  // Get feature column names (everything except user_id, risk_score, is_blacklist)
+  const metaCols = new Set(['user_id', 'risk_score', 'is_blacklist']);
+  const firstRow = records[0];
+  const featureCols = firstRow ? Object.keys(firstRow).filter(k => !metaCols.has(k)) : [];
+
+  predictCache = records.map(r => {
+    const uid = parseInt(r['user_id'] ?? '0', 10);
+    const riskScore = parseFloat(r['risk_score'] ?? '0');
+    const isBlacklist = parseInt(r['is_blacklist'] ?? '0', 10) as 0 | 1;
+
+    // Extract non-null SHAP features (top-10 have values, rest are empty)
+    const shapFeatures: ShapFeature[] = [];
+    for (const col of featureCols) {
+      const val = r[col];
+      if (val != null && val !== '') {
+        shapFeatures.push({
+          feature_name: zhFeatureName(col),
+          contribution: parseFloat(val),
+        });
+      }
+    }
+    // Sort by |contribution| descending
+    shapFeatures.sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution));
+
+    return { user_id: uid, risk_score: riskScore, is_blacklist: isBlacklist, shap_features: shapFeatures };
+  })
+    .filter(n => !isNaN(n.user_id))
+    .sort((a, b) => b.risk_score - a.risk_score);
+
+  return predictCache;
+}
+
 export async function getComputedSubgraph(userId: number, hops: number = 2): Promise<SubgraphResponse> {
   await loadGraphData();
   const nm = nodeMap!;
@@ -353,12 +551,15 @@ export async function getComputedSubgraph(userId: number, hops: number = 2): Pro
     if (frontier.size === 0) break;
   }
 
+  // Build node set, filtering low-risk non-center users
+  const keptNodeIds = new Set<number>();
   const resultNodes: SubgraphNode[] = [];
   for (const nodeId of visitedNodes) {
     const rec = nm.get(nodeId);
     if (!rec) continue;
-    // Always include center node and wallets; filter user nodes below risk threshold
-    if (rec.nodeType === 'user' && rec.numericId !== userId && rec.riskScore < 0.5) continue;
+    // Keep: center user, all wallets, users with risk >= 0.4
+    if (rec.nodeType === 'user' && rec.numericId !== userId && rec.riskScore < 0.4) continue;
+    keptNodeIds.add(rec.numericId);
     resultNodes.push({
       user_id: rec.numericId,
       risk_score: rec.riskScore,
@@ -368,7 +569,22 @@ export async function getComputedSubgraph(userId: number, hops: number = 2): Pro
     });
   }
 
-  return { nodes: resultNodes, edges: resultEdges };
+  // Only keep edges where both endpoints are in the kept node set
+  const filteredEdges = resultEdges.filter(
+    e => keptNodeIds.has(e.source) && keptNodeIds.has(e.target),
+  );
+
+  // Remove orphan wallets (wallets with no remaining edges)
+  const connectedIds = new Set<number>();
+  for (const e of filteredEdges) {
+    connectedIds.add(e.source);
+    connectedIds.add(e.target);
+  }
+  // Center user is always kept even if isolated
+  connectedIds.add(userId);
+  const finalNodes = resultNodes.filter(n => connectedIds.has(n.user_id));
+
+  return { nodes: finalNodes, edges: filteredEdges };
 }
 
 /**
@@ -382,7 +598,7 @@ export function hasGraphData(userId: number): boolean {
 }
 
 export async function getComputedNodeDetail(userId: number): Promise<NodeDetailResponse | null> {
-  await loadGraphData();
+  await Promise.all([loadGraphData(), loadShapData()]);
   const rec = userIdMap!.get(userId);
   if (!rec) return null;
 
@@ -397,12 +613,30 @@ export async function getComputedNodeDetail(userId: number): Promise<NodeDetailR
     else if (rel === 'R3') neighbor_counts.r3++;
   }
 
+  // Load SHAP features for this user
+  const shapFeatures: ShapFeature[] = [];
+  if (shapMap) {
+    const shapRow = shapMap.get(userId);
+    if (shapRow) {
+      for (const [colName, shapVal] of Object.entries(shapRow)) {
+        if (colName === 'user_id' || shapVal === '' || shapVal == null) continue;
+        const contribution = parseFloat(shapVal);
+        if (isNaN(contribution)) continue;
+        shapFeatures.push({
+          feature_name: zhFeatureName(colName),
+          contribution,
+        });
+      }
+      shapFeatures.sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution));
+    }
+  }
+
   return {
     user_id: userId,
     risk_score: rec.riskScore,
     status: rec.label >= 1.0 ? 1 : 0,
     account_age_days: 0,
-    shap_features: [],
+    shap_features: shapFeatures.slice(0, 10),
     neighbor_counts,
   };
 }

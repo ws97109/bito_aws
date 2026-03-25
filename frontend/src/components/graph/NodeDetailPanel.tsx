@@ -1,23 +1,158 @@
-import { useCallback } from 'react';
 import { useDashboard } from '../../context/DashboardContext';
+import type { ShapFeature } from '../../types/index';
 
-export function getShapColor(contribution: number): string {
-  if (contribution > 0) return 'text-red-400';
-  if (contribution < 0) return 'text-green-400';
-  return 'text-slate-500';
+// ── Waterfall chart (same style as FP/FN ShapPanel) ──────────────────────────
+
+const BASE_VALUE = -2.885;
+
+interface NodeWaterfallProps {
+  features: ShapFeature[];
+  baseValue: number;
 }
 
-export function NodeDetailPanel() {
-  const { state, dispatch, loadSubgraph } = useDashboard();
-  const { selectedNode, loading, error } = state;
+function NodeWaterfall({ features, baseValue }: NodeWaterfallProps) {
+  const sorted = [...features]
+    .sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution))
+    .slice(0, 10);
 
-  const handleSetAsCenter = useCallback(() => {
-    if (!selectedNode) return;
-    dispatch({ type: 'SELECT_USER', userId: selectedNode.user_id });
-    if (!state.subgraphCache.has(selectedNode.user_id)) {
-      loadSubgraph(selectedNode.user_id, 2);
-    }
-  }, [selectedNode, dispatch, loadSubgraph, state.subgraphCache]);
+  const finalValue = baseValue + sorted.reduce((s, f) => s + f.contribution, 0);
+
+  let running = finalValue;
+  const rows = sorted.map(f => {
+    const end = running;
+    const start = running - f.contribution;
+    running = start;
+    return { feature: f, start, end };
+  });
+
+  const allX = [baseValue, finalValue, ...rows.flatMap(r => [r.start, r.end])];
+  const xMin = Math.min(...allX);
+  const xMax = Math.max(...allX);
+  const xPad = (xMax - xMin) * 0.15;
+  const xLo = xMin - xPad;
+  const xHi = xMax + xPad;
+
+  const ROW_H   = 26;
+  const BAR_H   = 14;
+  const LABEL_W = 200;
+  const TOTAL_W = 600;
+  const BAR_AREA = TOTAL_W - LABEL_W - 6;
+  const PAD_T   = 28;
+  const PAD_B   = 28;
+  const TOTAL_H = rows.length * ROW_H + PAD_T + PAD_B;
+
+  const toX = (v: number) => LABEL_W + ((v - xLo) / (xHi - xLo)) * BAR_AREA;
+
+  return (
+    <svg
+      viewBox={`0 0 ${TOTAL_W} ${TOTAL_H}`}
+      width="100%"
+      style={{ display: 'block' }}
+    >
+      {/* Final prediction label at top */}
+      <text
+        x={toX(finalValue)} y={PAD_T - 14}
+        textAnchor="middle" fontSize="9"
+        fill="#64748b"
+      >
+        預測值
+      </text>
+      <text
+        x={toX(finalValue)} y={PAD_T - 4}
+        textAnchor="middle" fontSize="11" fontFamily="monospace"
+        fill="#94a3b8" fontWeight="bold"
+      >
+        f(x) = {finalValue.toFixed(3)}
+      </text>
+      <line
+        x1={toX(finalValue)} y1={PAD_T}
+        x2={toX(finalValue)} y2={PAD_T + 4}
+        stroke="#64748b" strokeWidth="1"
+      />
+
+      {/* Feature rows */}
+      {rows.map((row, i) => {
+        const y      = PAD_T + i * ROW_H + ROW_H / 2;
+        const isPos  = row.feature.contribution >= 0;
+        const x1     = toX(Math.min(row.start, row.end));
+        const x2     = toX(Math.max(row.start, row.end));
+        const barW   = Math.max(x2 - x1, 2);
+        const fill   = isPos ? '#ef4444' : '#3b82f6';
+        const fillBg = isPos ? 'rgba(239,68,68,0.12)' : 'rgba(59,130,246,0.12)';
+        const txtClr = isPos ? '#fca5a5' : '#93c5fd';
+        const valTxt = (isPos ? '+' : '') + row.feature.contribution.toFixed(2);
+        const connX  = toX(row.start);
+
+        return (
+          <g key={i}>
+            {i < rows.length - 1 && (
+              <line
+                x1={connX} y1={y + BAR_H / 2}
+                x2={connX} y2={y + ROW_H - BAR_H / 2}
+                stroke="#475569" strokeWidth="1" strokeDasharray="3,2"
+              />
+            )}
+            {i === rows.length - 1 && (
+              <line
+                x1={connX} y1={y + BAR_H / 2}
+                x2={connX} y2={TOTAL_H - PAD_B + 3}
+                stroke="#475569" strokeWidth="1" strokeDasharray="3,2"
+              />
+            )}
+
+            <text
+              x={4} y={y + 4}
+              textAnchor="start" fontSize="10"
+              fill="#e2e8f0"
+            >
+              {row.feature.feature_name}
+            </text>
+
+            <rect x={x1} y={y - BAR_H / 2} width={barW} height={BAR_H} rx={3} fill={fillBg} />
+            <rect x={x1} y={y - BAR_H / 2} width={barW} height={BAR_H} rx={3} fill={fill} opacity={0.82} />
+
+            <text
+              x={isPos ? x2 + 4 : x1 - 4}
+              y={y + 4}
+              textAnchor={isPos ? 'start' : 'end'}
+              fontSize="10" fontFamily="monospace" fontWeight="bold"
+              fill={txtClr}
+            >
+              {valTxt}
+            </text>
+          </g>
+        );
+      })}
+
+      {/* Base value label at bottom */}
+      <text
+        x={toX(baseValue)} y={TOTAL_H - PAD_B + 12}
+        textAnchor="middle" fontSize="9"
+        fill="#64748b"
+      >
+        基準值
+      </text>
+      <text
+        x={toX(baseValue)} y={TOTAL_H - PAD_B + 23}
+        textAnchor="middle" fontSize="11" fontFamily="monospace"
+        fill="#94a3b8" fontWeight="bold"
+      >
+        E[f(x)] = {baseValue.toFixed(3)}
+      </text>
+      <line
+        x1={toX(baseValue)} y1={TOTAL_H - PAD_B - 3}
+        x2={toX(baseValue)} y2={TOTAL_H - PAD_B + 3}
+        stroke="#64748b" strokeWidth="1"
+      />
+    </svg>
+  );
+}
+
+// ── NodeDetailPanel ──────────────────────────────────────────────────────────
+
+export function NodeDetailPanel() {
+  const { state } = useDashboard();
+  const { selectedNode, loading, error } = state;
 
   if (loading.nodeDetail) {
     return <div className="text-sm text-slate-400">載入節點資訊...</div>;
@@ -33,9 +168,8 @@ export function NodeDetailPanel() {
     );
   }
 
-  const { user_id, risk_score, status, account_age_days, shap_features, neighbor_counts } = selectedNode;
+  const { user_id, risk_score, status, shap_features, neighbor_counts } = selectedNode;
   const isFraud = status === 1;
-  const maxShap = Math.max(...shap_features.slice(0, 10).map(f => Math.abs(f.contribution)), 0.001);
 
   return (
     <div className="space-y-4">
@@ -57,7 +191,7 @@ export function NodeDetailPanel() {
         </div>
         <div className="rounded-md bg-slate-700/40 p-2.5">
           <p className="text-xs text-slate-400 uppercase tracking-wider">風險分數</p>
-          <p className={`text-base font-bold mt-0.5 ${risk_score > 0.9 ? 'text-red-400' : risk_score > 0.7 ? 'text-orange-400' : 'text-yellow-400'}`}>
+          <p className={`text-base font-bold mt-0.5 ${risk_score > 0.9 ? 'text-red-400' : risk_score > 0.7 ? 'text-orange-400' : risk_score > 0.4 ? 'text-yellow-400' : 'text-emerald-400'}`}>
             {risk_score.toFixed(3)}
           </p>
         </div>
@@ -68,45 +202,46 @@ export function NodeDetailPanel() {
           </p>
         </div>
         <div className="rounded-md bg-slate-700/40 p-2.5">
-          <p className="text-xs text-slate-400 uppercase tracking-wider">帳戶年齡</p>
-          <p className="text-base font-bold text-slate-100 mt-0.5">{account_age_days} 天</p>
+          <p className="text-xs text-slate-400 uppercase tracking-wider">鄰居數量</p>
+          <p className="text-base font-bold text-slate-100 mt-0.5">{neighbor_counts.r1 + neighbor_counts.r2 + neighbor_counts.r3}</p>
         </div>
       </div>
 
-      {/* SHAP features */}
-      <div>
-        <h4 className="text-xs uppercase tracking-wider text-slate-400 mb-2 flex items-center gap-1.5">
-          <span className="w-0.5 h-3.5 bg-sky-500 rounded-full inline-block"></span>
-          SHAP Top-10 特徵貢獻
-        </h4>
-        {shap_features.length === 0 ? (
-          <p className="text-xs text-slate-400">SHAP 資料不可用</p>
-        ) : (
-          <div className="space-y-1.5">
-            {shap_features.slice(0, 10).map((f, i) => (
-              <div key={i} className="relative overflow-hidden bg-slate-700/30 rounded-md p-2.5">
-                {/* Magnitude bar */}
-                <div
-                  className={`absolute inset-y-0 left-0 rounded-md ${f.contribution > 0 ? 'bg-red-500/15' : 'bg-emerald-500/15'}`}
-                  style={{ width: `${(Math.abs(f.contribution) / maxShap) * 100}%` }}
-                />
-                <div className="relative flex justify-between items-center">
-                  <span className="text-slate-300 text-xs">{f.feature_name}</span>
-                  <span className={`font-mono font-semibold text-xs ${getShapColor(f.contribution)}`}>
-                    {f.contribution > 0 ? '+' : ''}{f.contribution.toFixed(3)}
-                  </span>
-                </div>
-              </div>
-            ))}
+      {/* SHAP waterfall */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 pb-2 border-b border-slate-700">
+          <span className="w-0.5 h-4 bg-sky-500 rounded-full inline-block flex-shrink-0"></span>
+          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300">SHAP 瀑布圖 — 特徵貢獻分析</h4>
+          <span className="ml-auto text-[10px] text-slate-500 font-mono">User {user_id}</span>
+        </div>
+
+        {/* Legend */}
+        <div className="flex items-center gap-4 text-[10px] text-slate-400">
+          <div className="flex items-center gap-1">
+            <span className="inline-block w-2.5 h-2.5 rounded-sm bg-red-500 opacity-80"></span>
+            正向貢獻（增加詐騙機率）
           </div>
-        )}
+          <div className="flex items-center gap-1">
+            <span className="inline-block w-2.5 h-2.5 rounded-sm bg-blue-500 opacity-80"></span>
+            負向貢獻（降低詐騙機率）
+          </div>
+        </div>
+
+        {/* Chart area */}
+        <div className="bg-slate-900/40 rounded-lg px-2 py-1.5 ring-1 ring-slate-700/40">
+          {shap_features.length === 0 ? (
+            <p className="text-xs text-slate-400 text-center py-4">SHAP 資料不可用</p>
+          ) : (
+            <NodeWaterfall features={shap_features} baseValue={BASE_VALUE} />
+          )}
+        </div>
       </div>
 
       {/* Neighbor counts */}
       <div>
         <h4 className="text-xs uppercase tracking-wider text-slate-400 mb-2 flex items-center gap-1.5">
           <span className="w-0.5 h-3.5 bg-sky-500 rounded-full inline-block"></span>
-          鄰居數量
+          鄰居關係
         </h4>
         <div className="flex gap-2">
           <span className="bg-sky-900/40 text-sky-300 rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-sky-500/30">錢包→帳戶 · {neighbor_counts.r1}</span>
@@ -115,14 +250,6 @@ export function NodeDetailPanel() {
         </div>
       </div>
 
-      <div className="border-t border-slate-700 pt-3">
-        <button
-          onClick={handleSetAsCenter}
-          className="w-full py-2 text-sm border border-indigo-500/70 text-indigo-400 hover:bg-indigo-500/20 font-semibold rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-colors"
-        >
-          &#9654; 設為中心節點
-        </button>
-      </div>
     </div>
   );
 }

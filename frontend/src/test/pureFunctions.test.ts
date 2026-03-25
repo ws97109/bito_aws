@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { getNodeColor, getLinkDash } from '../components/graph/GraphViewer';
-import { getShapColor } from '../components/graph/NodeDetailPanel';
+
 import { getFilteredNodes } from '../components/graph/NodeSelector';
 import type { SubgraphNode, SubgraphEdge, FraudNode } from '../types/index';
 
@@ -54,22 +54,6 @@ describe('getLinkDash', () => {
   it('returns [1, 2] (dotted) for R3', () => {
     const edge: SubgraphEdge = { source: 1, target: 2, relation_type: 'R3' };
     expect(getLinkDash(edge)).toEqual([1, 2]);
-  });
-});
-
-// ── getShapColor ──────────────────────────────────────────────────────────────
-
-describe('getShapColor', () => {
-  it('returns red class for positive contribution', () => {
-    expect(getShapColor(0.5)).toBe('text-red-600');
-  });
-
-  it('returns green class for negative contribution', () => {
-    expect(getShapColor(-0.3)).toBe('text-green-600');
-  });
-
-  it('returns gray class for zero contribution', () => {
-    expect(getShapColor(0)).toBe('text-gray-500');
   });
 });
 
