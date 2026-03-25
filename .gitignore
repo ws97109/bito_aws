@@ -32,3 +32,5 @@ Wei_model/output/
 !Wei_model/output/gnn_edge_list.csv
 !Wei_model/output/gnn_node_list.csv
 !Wei_model/output/blacklist_analysis.xlsx
+!Wei_model/output/shap_top10_by_group.xlsx
+!Wei_model/output/shap_values_test.csv

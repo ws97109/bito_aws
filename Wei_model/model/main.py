@@ -607,6 +607,52 @@ def main(
               f"{row['percentage']:>6.2f}% {row['cumulative_pct']:>6.2f}%")
     print(f"\n  已存至：shap_all_features.csv")
 
+    # ── Step 7.5：儲存每個 test user 的 SHAP 值 + 分群 Excel ──
+    print("\n" + "="*55)
+    print("[Step 7.5] 儲存 SHAP 值矩陣 & 產生分群 SHAP Excel")
+    print("="*55)
+
+    # 建立 SHAP 值 DataFrame（每列一個 test user，每欄一個特徵）
+    shap_df = pd.DataFrame(explainer.shap_values, columns=feature_names)
+    shap_df.insert(0, "user_id", feat_df.index[idx_te])
+    shap_df.to_csv(os.path.join(output_dir, "shap_values_test.csv"), index=False)
+    print(f"  SHAP 值矩陣已儲存：shap_values_test.csv ({len(shap_df)} 筆)")
+
+    # 分群 Excel：每個 user 只保留 SHAP 絕對值 Top 10，其餘 None
+    def build_top10_shap_sheet(user_ids, shap_matrix, feat_names):
+        rows = []
+        for i, uid in enumerate(user_ids):
+            sv = shap_matrix[i]
+            top10_idx = np.argsort(np.abs(sv))[-10:]
+            row = {"user_id": uid}
+            for j, fname in enumerate(feat_names):
+                row[fname] = float(sv[j]) if j in top10_idx else None
+            rows.append(row)
+        return pd.DataFrame(rows)
+
+    # 分群
+    te_user_ids = feat_df.index[idx_te]
+    te_pred = (y_proba >= optimal_t).astype(int)
+
+    black_mask = te_pred == 1
+    fp_mask    = (y_te == 0) & (te_pred == 1)
+    fn_mask    = (y_te == 1) & (te_pred == 0)
+
+    shap_vals = explainer.shap_values
+
+    sheet_black = build_top10_shap_sheet(te_user_ids[black_mask], shap_vals[black_mask], feature_names)
+    sheet_fp    = build_top10_shap_sheet(te_user_ids[fp_mask],    shap_vals[fp_mask],    feature_names)
+    sheet_fn    = build_top10_shap_sheet(te_user_ids[fn_mask],    shap_vals[fn_mask],    feature_names)
+
+    shap_excel_path = os.path.join(output_dir, "shap_top10_by_group.xlsx")
+    with pd.ExcelWriter(shap_excel_path, engine="openpyxl") as writer:
+        sheet_black.to_excel(writer, sheet_name="黑名單_SHAP", index=False)
+        sheet_fp.to_excel(writer, sheet_name="FP_白預測成黑_SHAP", index=False)
+        sheet_fn.to_excel(writer, sheet_name="FN_黑預測成白_SHAP", index=False)
+
+    print(f"  分群 SHAP Excel 已儲存：shap_top10_by_group.xlsx")
+    print(f"    黑名單: {len(sheet_black)} 筆, FP: {len(sheet_fp)} 筆, FN: {len(sheet_fn)} 筆")
+
     # ── Step 8：個體報告 ─────────────────────────
     print("\n" + "="*55)
     print("[Step 8] 生成高風險用戶個體報告（Top 5）+ Waterfall 圖")
