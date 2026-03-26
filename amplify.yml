@@ -1,0 +1,18 @@
+version: 1
+frontend:
+    phases:
+        preBuild:
+            commands:
+                - cd frontend
+                - echo "VITE_GROQ_API_KEY=$VITE_GROQ_API_KEY" > .env
+                - npm install
+        build:
+            commands:
+                - npm run build
+    artifacts:
+        baseDirectory: frontend/dist
+        files:
+            - '**/*'
+    cache:
+        paths:
+            - frontend/node_modules/**/*
