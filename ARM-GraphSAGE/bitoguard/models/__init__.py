@@ -1,1 +1,0 @@
-"""BitoGuard Models"""
