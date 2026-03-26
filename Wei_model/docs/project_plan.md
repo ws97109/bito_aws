@@ -901,7 +901,7 @@ Bio_AWS_Workshop/
 │   ├── pseudo_labeling.py            # 半監督學習模組
 │   ├── shap_explainer.py             # SHAP 可解釋性分析
 │   ├── main.py                       # Pipeline 主程式
-│   └── requirment.txt                # Python 依賴
+│   └── requirements.txt               # Python 依賴
 │
 ├── output/                           # 實驗結果
 │   └── predict_label.csv             # 最終預測結果
