@@ -38,17 +38,18 @@ function barColor(feature: string): string {
 // ── 靜態特徵類別說明 ──────────────────────────────────────────────────────────
 
 const FEATURE_CATEGORIES = [
-  { icon:'👤', name:'用戶基本特徵',  accent:'sky',     count:15, description:'帳號生命週期、KYC 驗證行為與註冊模式。其中 is_female、age 因公平性考量於篩選後移除' },
-  { icon:'💵', name:'法幣行為',      accent:'emerald', count:14, description:'台幣入金與提領統計（次數/總額/均值/標準差/最大值）、淨流入、出入比、Smurfing 偵測與提領 IP 覆蓋率' },
-  { icon:'🪙', name:'虛擬貨幣行為', accent:'yellow',  count:13, description:'加密貨幣出入金統計、鏈上提領次數、幣種/協定多樣性、錢包地址數、內轉次數與對象數、提領 IP 覆蓋率' },
-  { icon:'📊', name:'交易行為',      accent:'violet',  count:9,  description:'掛單簿交易統計（次數/總額/均值/最大值）、買單佔比、市價單佔比、一鍵買賣統計、合計交易量' },
-  { icon:'🌐', name:'IP 特徵',       accent:'orange',  count:4,  description:'跨表整合的 IP 唯一數、總操作數、深夜操作比例、IP 共用人數上限' },
-  { icon:'🕸️', name:'圖拓撲特徵',   accent:'pink',    count:5,  description:'從 crypto_transfer 內轉關係建圖，提取 PageRank、出入度、連通分量大小、介數中心性' },
-  { icon:'⏱️', name:'時序與資金流速',accent:'cyan',    count:8,  description:'交易間隔統計（均值/標準差/最小/中位數）、爆發偵測、金額分位比、活躍天數、入金到提領最短停留時間' },
-  { icon:'🚩', name:'紅旗特徵',      accent:'red',     count:6,  description:'入金到首筆提領時間、法幣入金/幣出比、金額變異係數、KYC 後 48 小時交易旗標、幣出入比、同天出入金次數' },
-  { icon:'🔗', name:'跨表衍生特徵',  accent:'teal',    count:5,  description:'總交易次數、首末交易間隔、週末交易佔比、7 天 vs 30 天行為加速比、複合風險分數（加權組合）' },
-  { icon:'🔬', name:'異常偵測分數',  accent:'amber',   count:3,  description:'Isolation Forest、HBOS、LOF 三種無監督方法產生的異常評分' },
-  { icon:'🧠', name:'GNN 嵌入',      accent:'indigo',  count:16, description:'HeteroSAGE + GAT 在用戶–錢包異構圖上學習的節點表示，經 PCA 降維至 16 維' },
+  { icon:'👤', name:'用戶人口特徵',  accent:'sky',     count:15, description:'KYC 異常（秒級完成暗示自動化）、深夜註冊、性別/職業風險。代表特徵：kyc_speed_sec, account_age_days, is_female, reg_hour, reg_is_night' },
+  { icon:'💵', name:'法幣交易行為',  accent:'emerald', count:14, description:'淨流出、入金/提領比異常、Smurfing 偵測。代表特徵：twd_dep_sum, twd_net_flow, twd_withdraw_ratio, twd_smurf_flag' },
+  { icon:'🪙', name:'虛幣交易行為', accent:'yellow',  count:15, description:'多錢包分散提領、跨鏈移轉。代表特徵：crypto_wit_sum, crypto_wallet_hash_nunique, crypto_protocol_diversity' },
+  { icon:'📊', name:'掛單/一鍵買賣', accent:'violet',  count:9,  description:'單向購買、市價單洗量。代表特徵：trading_buy_ratio, swap_sum, trading_market_order_ratio, total_trading_volume' },
+  { icon:'🌐', name:'IP & 資金流速', accent:'orange',  count:5,  description:'多 IP 切換、深夜操作、資金快進快出。代表特徵：ip_unique_count, ip_night_ratio, ip_max_shared, fund_stay_sec' },
+  { icon:'🕸️', name:'交易圖拓撲',   accent:'pink',    count:5,  description:'資金樞紐、詐騙集團聚集。代表特徵：pagerank_score, connected_component_size, betweenness_centrality' },
+  { icon:'🔗', name:'跨表衍生',      accent:'teal',    count:4,  description:'近期活動加速。代表特徵：total_tx_count, weekend_tx_ratio, velocity_ratio_7d_vs_30d' },
+  { icon:'🚩', name:'AML 紅旗指標',  accent:'red',     count:6,  description:'法幣入→幣出漏斗、Smurfing 拆單。代表特徵：twd_to_crypto_out_ratio, same_day_in_out_count, tx_amount_cv' },
+  { icon:'⏱️', name:'時序模式',      accent:'cyan',    count:7,  description:'規律性操作偵測、爆發交易。代表特徵：tx_interval_mean, tx_interval_min, amount_p90_p10_ratio, active_days' },
+  { icon:'🎯', name:'複合風險分數',  accent:'rose',    count:1,  description:'多維度風險加權綜合。代表特徵：composite_risk_score' },
+  { icon:'🔬', name:'異常偵測分數',  accent:'amber',   count:3,  description:'Isolation Forest、HBOS、LOF 三種無監督方法產生的異常評分（後續步驟加入）' },
+  { icon:'🧠', name:'GNN 嵌入',      accent:'indigo',  count:16, description:'HeteroSAGE + GAT 在用戶–錢包異構圖上學習的節點表示，經 PCA 降維至 16 維（後續步驟加入）' },
 ];
 
 const ACCENT: Record<string, { border:string; bg:string; badge:string; title:string }> = {
@@ -63,6 +64,8 @@ const ACCENT: Record<string, { border:string; bg:string; badge:string; title:str
   teal:    { border:'border-teal-500/30',    bg:'bg-teal-500/5',    badge:'bg-teal-500/15 text-teal-300',    title:'text-teal-300' },
   amber:   { border:'border-amber-500/30',   bg:'bg-amber-500/5',   badge:'bg-amber-500/15 text-amber-300',   title:'text-amber-300' },
   indigo:  { border:'border-indigo-500/30',  bg:'bg-indigo-500/5',  badge:'bg-indigo-500/15 text-indigo-300',  title:'text-indigo-300' },
+  slate:   { border:'border-slate-500/30',   bg:'bg-slate-500/5',   badge:'bg-slate-500/15 text-slate-300',   title:'text-slate-300' },
+  rose:    { border:'border-rose-500/30',    bg:'bg-rose-500/5',    badge:'bg-rose-500/15 text-rose-300',    title:'text-rose-300' },
 };
 
 // ── 自定義 Tooltip ────────────────────────────────────────────────────────────
@@ -270,8 +273,6 @@ export function FeatureInfoPanel() {
     });
   }, []);
 
-  const totalFeatures = FEATURE_CATEGORIES.reduce((s, c) => s + c.count, 0);
-
   const TABS: { id: Tab; label: string }[] = [
     { id: 'all',        label: '📈 整體重要性' },
     { id: 'blacklist',  label: '🚫 黑名單重要性' },
@@ -290,20 +291,20 @@ export function FeatureInfoPanel() {
             <div className="flex-1 min-w-0">
               <h2 className="text-base font-bold text-purple-300 mb-1">模型特徵說明</h2>
               <p className="text-xs text-slate-400 leading-relaxed">
-                共 <span className="text-white font-semibold">{totalFeatures} 個原始特徵</span>（含 GNN 嵌入與異常偵測分數），
-                經零方差移除、高相關去重（&gt;0.95）、LightGBM 重要性篩選後，再移除受保護屬性（is_female、age），
-                以 <span className="text-purple-300 font-semibold">XGBoost / LightGBM / CatBoost Stacking</span> 集成。
-                SHAP 重要性來自真實預測資料。
+                特徵工程產出 <span className="text-white font-semibold">81 個基礎特徵</span>，
+                經零方差移除（−1）、高相關去重 &gt;0.95（−13）、LightGBM 零重要性篩選（−2）後剩 <span className="text-white font-semibold">65 個</span>，
+                再加入異常偵測分數（+3）與 GNN 嵌入（+16），移除受保護屬性 is_female、age（−2），
+                最終以 <span className="text-purple-300 font-semibold">82 維特徵</span> 輸入 XGBoost / LightGBM / CatBoost Stacking 集成。
               </p>
             </div>
           </div>
 
           <div className="mt-4 grid grid-cols-4 gap-2">
             {[
-              { label:'特徵類別',   value:FEATURE_CATEGORIES.length, unit:'類' },
-              { label:'原始特徵數', value:totalFeatures,              unit:'個' },
-              { label:'篩選步驟',   value:4,                          unit:'階段' },
-              { label:'集成模型數', value:3,                          unit:'個' },
+              { label:'特徵類別',   value:10,  unit:'大類' },
+              { label:'基礎特徵數', value:81,  unit:'維' },
+              { label:'篩選後',     value:65,  unit:'維' },
+              { label:'最終輸入',   value:82,  unit:'維' },
             ].map(({ label, value, unit }) => (
               <div key={label} className="bg-slate-900/60 rounded-lg p-3 text-center">
                 <div className="text-lg font-bold text-white">{value}<span className="text-xs text-slate-400 ml-0.5">{unit}</span></div>
@@ -385,11 +386,12 @@ export function FeatureInfoPanel() {
           <h3 className="text-sm font-semibold text-slate-300 mb-3">模型訓練流程</h3>
           <div className="flex flex-wrap items-center gap-2 text-xs">
             {[
-              { label:'特徵工程 (79)',    cls:'bg-sky-500/20 text-sky-300 border-sky-500/30' },
+              { label:'特徵工程 (81)',    cls:'bg-sky-500/20 text-sky-300 border-sky-500/30' },
+              { label:'篩選 81→65',      cls:'bg-purple-500/20 text-purple-300 border-purple-500/30' },
               { label:'異常偵測 (+3)',    cls:'bg-amber-500/20 text-amber-300 border-amber-500/30' },
               { label:'GNN 嵌入 (+16)',   cls:'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' },
-              { label:'零方差/高相關/重要性篩選', cls:'bg-purple-500/20 text-purple-300 border-purple-500/30' },
-              { label:'移除受保護屬性',  cls:'bg-red-500/20 text-red-300 border-red-500/30' },
+              { label:'移除受保護屬性 (−2)', cls:'bg-red-500/20 text-red-300 border-red-500/30' },
+              { label:'最終 82 維',       cls:'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' },
               { label:'Stacking 集成',   cls:'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' },
               { label:'SHAP 解釋',       cls:'bg-yellow-500/20 text-yellow-300 border-yellow-500/30' },
             ].reduce<React.ReactNode[]>((acc, step, i) => {

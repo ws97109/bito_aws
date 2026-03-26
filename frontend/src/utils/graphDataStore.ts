@@ -834,15 +834,21 @@ let shapTop20BlacklistCache: ShapTop20Entry[] | null = null;
 
 function parseShapTop20(text: string): ShapTop20Entry[] {
   const records = parseCsvRecords(text);
-  return records.map(r => ({
-    rank:    parseInt(r['排名'] ?? '0', 10),
-    feature: r['feature'] ?? '',
-    label:   r['中文名稱'] ?? r['feature'] ?? '',
-    shap:    parseFloat(r['SHAP值'] ?? '0'),
-    pct:     r['佔比'] ?? '',
-    freq:    parseInt(r['頻率次數'] ?? '0', 10),
-    cumPct:  r['累積%'] ?? '',
-  })).filter(e => e.rank > 0);
+  return records.map(r => {
+    const feat = r['feature'] ?? '';
+    const csvLabel = r['中文名稱'] ?? '';
+    // CSV 中文名稱若與英文相同或為空，則用 zhFeatureName 翻譯
+    const label = (csvLabel && csvLabel !== feat) ? csvLabel : zhFeatureName(feat);
+    return {
+      rank:    parseInt(r['排名'] ?? '0', 10),
+      feature: feat,
+      label,
+      shap:    parseFloat(r['SHAP值'] ?? '0'),
+      pct:     r['佔比'] ?? '',
+      freq:    parseInt(r['頻率次數'] ?? '0', 10),
+      cumPct:  r['累積%'] ?? '',
+    };
+  }).filter(e => e.rank > 0);
 }
 
 export async function getShapTop20AllUsers(): Promise<ShapTop20Entry[]> {
