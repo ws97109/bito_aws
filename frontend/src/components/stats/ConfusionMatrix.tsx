@@ -83,9 +83,8 @@ export function ConfusionMatrix() {
           { label: '準確率 Accuracy',    value: pct(data.accuracy),    color: 'text-sky-400' },
           { label: '精確率 Precision',   value: pct(data.precision),   color: 'text-violet-400' },
           { label: '召回率 Recall',      value: pct(data.recall),      color: 'text-emerald-400' },
-          { label: 'F1 Score',           value: pct(data.f1),          color: 'text-yellow-400' },
+          { label: 'F1 Score', value: pct(data.f1Weighted),  color: 'text-amber-400' },
           { label: '特異度 Specificity', value: pct(data.specificity), color: 'text-cyan-400' },
-          { label: '總樣本數',           value: fmt(data.total),       color: 'text-slate-300' },
         ].map(m => (
           <div key={m.label} className="bg-slate-900/50 rounded-md px-2 py-1.5 flex justify-between items-center">
             <span className="text-[10px] text-slate-500">{m.label}</span>
