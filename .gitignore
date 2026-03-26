@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+package-lock.json
 
 # macOS
 .DS_Store
@@ -41,4 +42,6 @@ Wei_model/output/
 !Wei_model/output/shap_values_all_top10.csv
 !Wei_model/output/all_user_risk_scores.xlsx
 !Wei_model/output/predict_detail.csv
+!Wei_model/output/shap_top20_all_users.csv
+!Wei_model/output/shap_top20_blacklist.csv
 
