@@ -381,15 +381,24 @@ export async function getComputedStats(): Promise<StatsResponse> {
   const nm = nodeMap!;
   const edges = allEdges!;
 
+  const FRAUD_THRESHOLD = 0.8743;
+
   let fraudNodes = 0;
   let totalNodes = 0;
-  const riskBuckets = [0, 0, 0, 0, 0]; // [0,0.2) [0.2,0.4) [0.4,0.6) [0.6,0.8) [0.8,1.0]
+  const riskBuckets = [0, 0, 0, 0, 0];
+  // [0, 0.2)  [0.2, 0.4)  [0.4, 0.6)  [0.6, THRESHOLD)  [THRESHOLD, 1.0]
 
   for (const rec of nm.values()) {
     if (rec.nodeType !== 'user') continue;
     totalNodes++;
     if (rec.label >= 1.0) fraudNodes++;
-    const idx = Math.min(Math.floor(rec.riskScore / 0.2), 4);
+    const s = rec.riskScore;
+    let idx: number;
+    if      (s < 0.2)              idx = 0;
+    else if (s < 0.4)              idx = 1;
+    else if (s < 0.6)              idx = 2;
+    else if (s < FRAUD_THRESHOLD)  idx = 3;
+    else                           idx = 4;
     riskBuckets[idx]++;
   }
 
@@ -407,11 +416,11 @@ export async function getComputedStats(): Promise<StatsResponse> {
     normal_nodes: totalNodes - fraudNodes,
     fraud_ratio: totalNodes > 0 ? fraudNodes / totalNodes : 0,
     risk_distribution: [
-      { range: '[0, 0.2)',  count: riskBuckets[0] },
-      { range: '[0.2, 0.4)', count: riskBuckets[1] },
-      { range: '[0.4, 0.6)', count: riskBuckets[2] },
-      { range: '[0.6, 0.8)', count: riskBuckets[3] },
-      { range: '[0.8, 1.0]', count: riskBuckets[4] },
+      { range: '[0, 0.2)',        count: riskBuckets[0] },
+      { range: '[0.2, 0.4)',      count: riskBuckets[1] },
+      { range: '[0.4, 0.6)',      count: riskBuckets[2] },
+      { range: '[0.6, 0.8743)',   count: riskBuckets[3] },
+      { range: '[0.8743, 1.0]',   count: riskBuckets[4] },
     ],
     relation_counts,
   };
@@ -440,30 +449,37 @@ export async function getBlacklistNodes(): Promise<FraudNode[]> {
 export async function getFpFnData(): Promise<{ fp: FpFnNode[]; fn: FpFnNode[] }> {
   if (fpCache && fnCache) return { fp: fpCache, fn: fnCache };
 
-  const [fpText, fnText] = await Promise.all([
-    fetchCsv('/output/black_to_white.csv'),
-    fetchCsv('/output/white_to_black.csv'),
-  ]);
+  // 來源：all_user_risk_scores.csv
+  // 欄位：user_id, true_label (0=白/1=黑/空=預測目標), risk_score, predicted_blacklist, risk_level, data_source
+  const text = await fetchCsv('/output/all_user_risk_scores.csv');
+  const records = parseCsvRecords(text);
 
-  fpCache = parseCsvRecords(fpText)
-    .map(r => ({
-      user_id: parseInt(r['user_id'] ?? '0', 10),
-      risk_score: parseFloat(r['risk_score'] ?? '0'),
-      actual_status: 0 as const,
-      predicted_status: 1 as const,
-    }))
-    .filter(n => !isNaN(n.user_id))
-    .sort((a, b) => b.risk_score - a.risk_score);
+  const fp: FpFnNode[] = [];
+  const fn: FpFnNode[] = [];
 
-  fnCache = parseCsvRecords(fnText)
-    .map(r => ({
-      user_id: parseInt(r['user_id'] ?? '0', 10),
-      risk_score: parseFloat(r['risk_score'] ?? '0'),
-      actual_status: 1 as const,
-      predicted_status: 0 as const,
-    }))
-    .filter(n => !isNaN(n.user_id))
-    .sort((a, b) => b.risk_score - a.risk_score);
+  for (const r of records) {
+    const label = r['true_label']?.trim();
+    if (label !== '0' && label !== '1') continue; // 跳過預測目標（空白）
+
+    const user_id        = parseInt(r['user_id'] ?? '', 10);
+    const risk_score     = parseFloat(r['risk_score'] ?? '0');
+    const predicted      = parseInt(r['predicted_blacklist'] ?? '0', 10);
+    const actual         = parseInt(label, 10) as 0 | 1;
+    const pred           = (predicted === 1 ? 1 : 0) as 0 | 1;
+
+    if (isNaN(user_id)) continue;
+
+    if (actual === 0 && pred === 1) {
+      // FP：實際正常，預測為詐騙
+      fp.push({ user_id, risk_score, actual_status: 0, predicted_status: 1 });
+    } else if (actual === 1 && pred === 0) {
+      // FN：實際詐騙，預測為正常
+      fn.push({ user_id, risk_score, actual_status: 1, predicted_status: 0 });
+    }
+  }
+
+  fpCache = fp.sort((a, b) => b.risk_score - a.risk_score);
+  fnCache = fn.sort((a, b) => a.risk_score - b.risk_score); // FN 按風險分數由低到高，方便找邊界案例
 
   return { fp: fpCache, fn: fnCache };
 }
@@ -693,4 +709,129 @@ export async function getComputedNodeDetail(userId: number): Promise<NodeDetailR
     neighbor_counts,
     neighbor_details: { r1: r1Peers, r2_out: r2OutPeers, r2_in: r2InPeers, r3: r3Peers },
   };
+}
+
+export interface ConfusionMatrixData {
+  tp: number; fp: number; tn: number; fn: number;
+  total: number;
+  accuracy: number;
+  precision: number;
+  recall: number;
+  f1: number;
+  specificity: number;
+  threshold: number;
+}
+
+export async function getConfusionMatrix(): Promise<ConfusionMatrixData> {
+  // 來源：all_user_risk_scores.csv（含完整真實標籤）
+  // 只計算 true_label 有值的列（0=白、1=黑），空白為預測目標不納入
+  const { fp: fpNodes, fn: fnNodes } = await getFpFnData();
+  const fpCount = fpNodes.length;
+  const fnCount = fnNodes.length;
+
+  // 從 all_user_risk_scores.csv 直接算全部 TP / TN
+  const text = await fetchCsv('/output/all_user_risk_scores.csv');
+  let tp = 0, tn = 0;
+  for (const r of parseCsvRecords(text)) {
+    const label = r['true_label']?.trim();
+    if (label !== '0' && label !== '1') continue;
+    const actual    = parseInt(label, 10);
+    const predicted = parseInt(r['predicted_blacklist'] ?? '0', 10);
+    if (actual === 1 && predicted === 1) tp++;
+    else if (actual === 0 && predicted === 0) tn++;
+  }
+
+  const fp    = fpCount;
+  const fn    = fnCount;
+  const total = tp + fp + tn + fn;
+  const precision = tp + fp > 0 ? tp / (tp + fp) : 0;
+  const recall    = tp + fn > 0 ? tp / (tp + fn) : 0;
+  return {
+    tp, fp, tn, fn, total,
+    accuracy:    total > 0 ? (tp + tn) / total : 0,
+    precision,
+    recall,
+    f1:          precision + recall > 0 ? 2 * precision * recall / (precision + recall) : 0,
+    specificity: tn + fp > 0 ? tn / (tn + fp) : 0,
+    threshold:   0.8743,
+  };
+}
+
+export interface ShapTop20Entry {
+  rank: number;
+  feature: string;   // 英文欄位名
+  label: string;     // 中文名稱
+  shap: number;      // 平均 |SHAP| 值
+  pct: string;       // 佔比 e.g. "8.45%"
+  freq: number;      // 頻率次數
+  cumPct: string;    // 累積%
+}
+
+let shapTop20AllCache: ShapTop20Entry[] | null = null;
+let shapTop20BlacklistCache: ShapTop20Entry[] | null = null;
+
+function parseShapTop20(text: string): ShapTop20Entry[] {
+  const records = parseCsvRecords(text);
+  return records.map(r => ({
+    rank:    parseInt(r['排名'] ?? '0', 10),
+    feature: r['feature'] ?? '',
+    label:   r['中文名稱'] ?? r['feature'] ?? '',
+    shap:    parseFloat(r['SHAP值'] ?? '0'),
+    pct:     r['佔比'] ?? '',
+    freq:    parseInt(r['頻率次數'] ?? '0', 10),
+    cumPct:  r['累積%'] ?? '',
+  })).filter(e => e.rank > 0);
+}
+
+export async function getShapTop20AllUsers(): Promise<ShapTop20Entry[]> {
+  if (shapTop20AllCache) return shapTop20AllCache;
+  const text = await fetchCsv('/output/shap_top20_all_users.csv');
+  shapTop20AllCache = parseShapTop20(text);
+  return shapTop20AllCache;
+}
+
+export async function getShapTop20Blacklist(): Promise<ShapTop20Entry[]> {
+  if (shapTop20BlacklistCache) return shapTop20BlacklistCache;
+  const text = await fetchCsv('/output/shap_top20_blacklist.csv');
+  shapTop20BlacklistCache = parseShapTop20(text);
+  return shapTop20BlacklistCache;
+}
+
+export interface FeatureImportanceEntry {
+  feature_name: string;       // 英文欄位名
+  label: string;              // 中文名稱
+  frequency: number;          // 出現在 top-10 的用戶人數
+  avg_abs_shap: number;       // 平均 |SHAP| (只計非空值)
+  avg_shap: number;           // 平均 SHAP (正=拉高風險, 負=拉低)
+}
+
+/** 從 shap_values.csv 彙總每個特徵的重要性統計 */
+export async function getFeatureImportanceSummary(): Promise<FeatureImportanceEntry[]> {
+  await loadShapData();
+  if (!shapMap || shapMap.size === 0) return [];
+
+  const stats = new Map<string, { sumAbs: number; sum: number; count: number }>();
+
+  for (const row of shapMap.values()) {
+    for (const [col, val] of Object.entries(row)) {
+      if (col === 'user_id' || val === '' || val == null) continue;
+      const num = parseFloat(val);
+      if (isNaN(num)) continue;
+      const entry = stats.get(col) ?? { sumAbs: 0, sum: 0, count: 0 };
+      entry.sumAbs += Math.abs(num);
+      entry.sum += num;
+      entry.count += 1;
+      stats.set(col, entry);
+    }
+  }
+
+  return Array.from(stats.entries())
+    .map(([col, { sumAbs, sum, count }]) => ({
+      feature_name: col,
+      label: zhFeatureName(col),
+      frequency: count,
+      avg_abs_shap: parseFloat((sumAbs / count).toFixed(5)),
+      avg_shap: parseFloat((sum / count).toFixed(5)),
+    }))
+    .sort((a, b) => b.avg_abs_shap - a.avg_abs_shap);
 }

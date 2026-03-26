@@ -7,6 +7,7 @@ import { StatCard } from './StatCard';
 import { RiskBarChart } from './RiskBarChart';
 import { RelationStats } from './RelationStats';
 import { RiskNodeList } from './RiskNodeList';
+import { ConfusionMatrix } from './ConfusionMatrix';
 
 export function StatsPanel() {
   const { stats, loading, error } = useStats();
@@ -37,6 +38,10 @@ export function StatsPanel() {
 
       <div className="bg-slate-800/40 rounded-lg p-3 ring-1 ring-slate-700/50">
         <RelationStats counts={stats.relation_counts} />
+      </div>
+
+      <div className="bg-slate-800/40 rounded-lg p-3 ring-1 ring-slate-700/50">
+        <ConfusionMatrix />
       </div>
 
       <div className="bg-slate-800/40 rounded-lg p-3 ring-1 ring-slate-700/50">

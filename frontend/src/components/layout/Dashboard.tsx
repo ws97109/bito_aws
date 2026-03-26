@@ -10,19 +10,24 @@ import { ShapPanel } from '../fpfn/ShapPanel';
 import { PredictStatsPanel } from '../predict/PredictStatsPanel';
 import { PredictNodeSelector } from '../predict/PredictNodeSelector';
 import { PredictDetailPanel } from '../predict/PredictDetailPanel';
+import { FeatureInfoPanel } from '../features/FeatureInfoPanel';
 
 export function Dashboard() {
   const { state } = useDashboard();
   const isFpFnMode = state.dashboardMode === 'fp-fn';
   const isPredictMode = state.dashboardMode === 'predict';
+  const isFeaturesMode = state.dashboardMode === 'features';
 
   const renderLeftPanel = () => {
+    if (isFeaturesMode) return null;
     if (isPredictMode) return <PredictStatsPanel />;
     if (isFpFnMode) return <FpFnStatsPanel />;
     return <StatsPanel />;
   };
 
   const renderRightContent = () => {
+    if (isFeaturesMode) return <FeatureInfoPanel />;
+
     if (isPredictMode) {
       return (
         <main className="flex-1 overflow-y-auto min-w-0 min-h-0">
