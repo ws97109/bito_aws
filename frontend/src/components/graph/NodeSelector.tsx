@@ -60,7 +60,7 @@ export function NodeSelector() {
         />
       </div>
 
-      <div className="max-h-28 overflow-y-auto ring-1 ring-slate-700 rounded-lg">
+      <div className="max-h-44 overflow-y-auto ring-1 ring-slate-700 rounded-lg">
         {loading ? (
           <div className="flex items-center justify-center h-16">
             <Spinner />
