@@ -11,7 +11,7 @@ _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(_SCRIPT_DIR)
 
 sys.path.insert(0, os.path.join(_SCRIPT_DIR, "model"))
-from Feature_rngineering import build_all_features
+from Feature_engineering import build_all_features
 
 DATA_DIR = os.path.join(ROOT, "adjust_data", "train")
 OUTPUT_DIR = os.path.join(_SCRIPT_DIR, "output")

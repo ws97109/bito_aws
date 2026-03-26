@@ -18,7 +18,7 @@ import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
 
-from Feature_rngineering import build_all_features
+from Feature_engineering import build_all_features
 from feature_selection import select_features
 from anomaly_detection import AnomalyFeatureExtractor, add_anomaly_scores_to_splits
 from ensemble import StackingEnsemble, evaluate, find_optimal_threshold

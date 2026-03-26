@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.join(_SCRIPT_DIR, "model"))
 
 import pandas as pd
 import numpy as np
-from Feature_rngineering import build_all_features
+from Feature_engineering import build_all_features
 from feature_selection import select_features
 
 DATA_DIR = os.path.join(ROOT, "adjust_data", "train")

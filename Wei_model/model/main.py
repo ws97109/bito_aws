@@ -26,7 +26,7 @@ WEI_MODEL_DIR = os.path.dirname(os.path.abspath(__file__))  # Wei_model/model/
 sys.path.insert(0, ROOT)
 
 # 直接從當前目錄導入（所有模組都在 model/ 目錄下）
-from Feature_rngineering import build_all_features
+from Feature_engineering import build_all_features
 from feature_selection import select_features
 from anomaly_detection import AnomalyFeatureExtractor, add_anomaly_scores_to_splits
 from Gnn_model import build_transaction_graph, BlacklistGNN
