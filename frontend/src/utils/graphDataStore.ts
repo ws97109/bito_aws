@@ -792,8 +792,53 @@ export async function getShapTop20AllUsers(): Promise<ShapTop20Entry[]> {
 
 export async function getShapTop20Blacklist(): Promise<ShapTop20Entry[]> {
   if (shapTop20BlacklistCache) return shapTop20BlacklistCache;
-  const text = await fetchCsv('/output/shap_top20_blacklist.csv');
-  shapTop20BlacklistCache = parseShapTop20(text);
+
+  const text = await fetchCsv('/output/shap_values_blacklist.csv');
+  const records = parseCsvRecords(text);
+
+  // 計算每個特徵的 mean|SHAP| 與正值頻率次數
+  const stats = new Map<string, { sumAbs: number; posCount: number; count: number }>();
+  for (const row of records) {
+    for (const [col, val] of Object.entries(row)) {
+      if (col === 'user_id' || val === '' || val == null) continue;
+      const num = parseFloat(val as string);
+      if (isNaN(num)) continue;
+      const s = stats.get(col) ?? { sumAbs: 0, posCount: 0, count: 0 };
+      s.sumAbs += Math.abs(num);
+      if (num > 0) s.posCount += 1;
+      s.count += 1;
+      stats.set(col, s);
+    }
+  }
+
+  // 計算佔比分母（全特徵 mean|SHAP| 總和）
+  let totalMeanAbs = 0;
+  const featureStats = Array.from(stats.entries()).map(([col, { sumAbs, posCount, count }]) => {
+    const meanAbs = sumAbs / count;
+    totalMeanAbs += meanAbs;
+    return { col, meanAbs, posCount };
+  });
+
+  // 排序取前 20
+  featureStats.sort((a, b) => b.meanAbs - a.meanAbs);
+  const top20 = featureStats.slice(0, 20);
+
+  // 組裝 ShapTop20Entry
+  let cumSum = 0;
+  shapTop20BlacklistCache = top20.map(({ col, meanAbs, posCount }, i) => {
+    const pctVal = totalMeanAbs > 0 ? (meanAbs / totalMeanAbs) * 100 : 0;
+    cumSum += pctVal;
+    return {
+      rank:    i + 1,
+      feature: col,
+      label:   zhFeatureName(col),
+      shap:    parseFloat(meanAbs.toFixed(6)),
+      pct:     pctVal.toFixed(2) + '%',
+      freq:    posCount,
+      cumPct:  cumSum.toFixed(2) + '%',
+    };
+  });
+
   return shapTop20BlacklistCache;
 }
 
