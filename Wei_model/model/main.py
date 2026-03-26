@@ -1078,6 +1078,7 @@ def main(
     te_pred_lbl  = (y_proba >= optimal_t).astype(int)
     te_shap_vals = all_explainer.shap_values[:len(y)][idx_te]
 
+    tp_mask_te    = (y_te == 1) & (te_pred_lbl == 1)
     fp_mask_te    = (y_te == 0) & (te_pred_lbl == 1)
     fn_mask_te    = (y_te == 1) & (te_pred_lbl == 0)
 

@@ -17,11 +17,16 @@ const FEATURE_COLOR: Record<string, string> = {
   twd_dep_sum: '#10b981', twd_dep_count: '#10b981', twd_net_flow: '#10b981',
   ip_night_ratio: '#f97316', ip_unique_count: '#f97316',
   career_freq: '#a855f7',
-  weekend_tx_ratio: '#06b6d4',
+  weekend_tx_ratio: '#14b8a6',
   reg_hour: '#3b82f6',
   kyc_speed_sec: '#3b82f6',
   is_app_user: '#3b82f6',
   trading_market_order_ratio: '#8b5cf6',
+  total_tx_count: '#14b8a6', first_to_last_tx_days: '#14b8a6', velocity_ratio_7d_vs_30d: '#14b8a6', composite_risk_score: '#14b8a6',
+  fund_stay_sec: '#06b6d4',
+  dep_to_first_wit_hours: '#ef4444', twd_to_crypto_out_ratio: '#ef4444', tx_amount_cv: '#ef4444',
+  rapid_kyc_then_trade: '#ef4444', crypto_out_in_ratio: '#ef4444', same_day_in_out_count: '#ef4444',
+  if_score: '#f59e0b', hbos_score: '#f59e0b', lof_score: '#f59e0b',
 };
 
 const DEFAULT_COLOR = '#64748b';
@@ -33,16 +38,17 @@ function barColor(feature: string): string {
 // ── 靜態特徵類別說明 ──────────────────────────────────────────────────────────
 
 const FEATURE_CATEGORIES = [
-  { icon:'👤', name:'用戶基本特徵',  accent:'sky',     count:15, description:'帳號生命週期與 KYC 驗證行為，反映用戶身份真實性' },
-  { icon:'💵', name:'法幣行為',      accent:'emerald', count:14, description:'台幣入金與提領模式，偵測結構化交易（Structuring）行為' },
-  { icon:'🪙', name:'虛擬貨幣行為', accent:'yellow',  count:15, description:'加密貨幣出入金模式與錢包多樣性，識別鏈上洗錢路徑' },
-  { icon:'📊', name:'交易行為',      accent:'violet',  count:9,  description:'掛單與一鍵買賣模式，分析交易頻率與方向偏好' },
-  { icon:'🌐', name:'IP 特徵',       accent:'orange',  count:4,  description:'登入 IP 多樣性與共用程度，偵測代理 IP 或帳號租用' },
-  { icon:'🕸️', name:'圖拓撲特徵',   accent:'pink',    count:5,  description:'基於交易圖的中心性指標，捕捉資金傳播網絡中的樞紐角色' },
-  { icon:'⏱️', name:'時序特徵',      accent:'cyan',    count:8,  description:'交易時間間隔分布與爆發行為，識別自動化腳本或緊急兌現' },
-  { icon:'🚩', name:'紅旗特徵',      accent:'red',     count:7,  description:'直接對應 AML 法規的可疑指標，高度聚焦於洗錢手法' },
-  { icon:'🔬', name:'異常偵測分數',  accent:'amber',   count:4,  description:'無監督方法產生的異常評分，補捉監督模型難以發現的邊緣案例' },
-  { icon:'🧠', name:'GNN 嵌入',      accent:'indigo',  count:16, description:'HeteroSAGE + GAT 在用戶–錢包異構圖上學習的 16 維節點表示' },
+  { icon:'👤', name:'用戶基本特徵',  accent:'sky',     count:15, description:'帳號生命週期、KYC 驗證行為與註冊模式。其中 is_female、age 因公平性考量於篩選後移除' },
+  { icon:'💵', name:'法幣行為',      accent:'emerald', count:14, description:'台幣入金與提領統計（次數/總額/均值/標準差/最大值）、淨流入、出入比、Smurfing 偵測與提領 IP 覆蓋率' },
+  { icon:'🪙', name:'虛擬貨幣行為', accent:'yellow',  count:13, description:'加密貨幣出入金統計、鏈上提領次數、幣種/協定多樣性、錢包地址數、內轉次數與對象數、提領 IP 覆蓋率' },
+  { icon:'📊', name:'交易行為',      accent:'violet',  count:9,  description:'掛單簿交易統計（次數/總額/均值/最大值）、買單佔比、市價單佔比、一鍵買賣統計、合計交易量' },
+  { icon:'🌐', name:'IP 特徵',       accent:'orange',  count:4,  description:'跨表整合的 IP 唯一數、總操作數、深夜操作比例、IP 共用人數上限' },
+  { icon:'🕸️', name:'圖拓撲特徵',   accent:'pink',    count:5,  description:'從 crypto_transfer 內轉關係建圖，提取 PageRank、出入度、連通分量大小、介數中心性' },
+  { icon:'⏱️', name:'時序與資金流速',accent:'cyan',    count:8,  description:'交易間隔統計（均值/標準差/最小/中位數）、爆發偵測、金額分位比、活躍天數、入金到提領最短停留時間' },
+  { icon:'🚩', name:'紅旗特徵',      accent:'red',     count:6,  description:'入金到首筆提領時間、法幣入金/幣出比、金額變異係數、KYC 後 48 小時交易旗標、幣出入比、同天出入金次數' },
+  { icon:'🔗', name:'跨表衍生特徵',  accent:'teal',    count:5,  description:'總交易次數、首末交易間隔、週末交易佔比、7 天 vs 30 天行為加速比、複合風險分數（加權組合）' },
+  { icon:'🔬', name:'異常偵測分數',  accent:'amber',   count:3,  description:'Isolation Forest、HBOS、LOF 三種無監督方法產生的異常評分' },
+  { icon:'🧠', name:'GNN 嵌入',      accent:'indigo',  count:16, description:'HeteroSAGE + GAT 在用戶–錢包異構圖上學習的節點表示，經 PCA 降維至 16 維' },
 ];
 
 const ACCENT: Record<string, { border:string; bg:string; badge:string; title:string }> = {
@@ -54,6 +60,7 @@ const ACCENT: Record<string, { border:string; bg:string; badge:string; title:str
   pink:    { border:'border-pink-500/30',    bg:'bg-pink-500/5',    badge:'bg-pink-500/15 text-pink-300',    title:'text-pink-300' },
   cyan:    { border:'border-cyan-500/30',    bg:'bg-cyan-500/5',    badge:'bg-cyan-500/15 text-cyan-300',    title:'text-cyan-300' },
   red:     { border:'border-red-500/30',     bg:'bg-red-500/5',     badge:'bg-red-500/15 text-red-300',     title:'text-red-300' },
+  teal:    { border:'border-teal-500/30',    bg:'bg-teal-500/5',    badge:'bg-teal-500/15 text-teal-300',    title:'text-teal-300' },
   amber:   { border:'border-amber-500/30',   bg:'bg-amber-500/5',   badge:'bg-amber-500/15 text-amber-300',   title:'text-amber-300' },
   indigo:  { border:'border-indigo-500/30',  bg:'bg-indigo-500/5',  badge:'bg-indigo-500/15 text-indigo-300',  title:'text-indigo-300' },
 };
@@ -283,8 +290,9 @@ export function FeatureInfoPanel() {
             <div className="flex-1 min-w-0">
               <h2 className="text-base font-bold text-purple-300 mb-1">模型特徵說明</h2>
               <p className="text-xs text-slate-400 leading-relaxed">
-                共 <span className="text-white font-semibold">{totalFeatures} 個原始特徵</span>，篩選後保留 <span className="text-white font-semibold">63 個</span>，
-                結合 <span className="text-purple-300 font-semibold">HeteroSAGE + GAT</span> GNN 嵌入，以 <span className="text-purple-300 font-semibold">XGBoost / LightGBM / CatBoost Stacking</span> 集成。
+                共 <span className="text-white font-semibold">{totalFeatures} 個原始特徵</span>（含 GNN 嵌入與異常偵測分數），
+                經零方差移除、高相關去重（&gt;0.95）、LightGBM 重要性篩選後，再移除受保護屬性（is_female、age），
+                以 <span className="text-purple-300 font-semibold">XGBoost / LightGBM / CatBoost Stacking</span> 集成。
                 SHAP 重要性來自真實預測資料。
               </p>
             </div>
@@ -294,7 +302,7 @@ export function FeatureInfoPanel() {
             {[
               { label:'特徵類別',   value:FEATURE_CATEGORIES.length, unit:'類' },
               { label:'原始特徵數', value:totalFeatures,              unit:'個' },
-              { label:'篩選後特徵', value:63,                         unit:'個' },
+              { label:'篩選步驟',   value:4,                          unit:'階段' },
               { label:'集成模型數', value:3,                          unit:'個' },
             ].map(({ label, value, unit }) => (
               <div key={label} className="bg-slate-900/60 rounded-lg p-3 text-center">
@@ -377,11 +385,11 @@ export function FeatureInfoPanel() {
           <h3 className="text-sm font-semibold text-slate-300 mb-3">模型訓練流程</h3>
           <div className="flex flex-wrap items-center gap-2 text-xs">
             {[
-              { label:'特徵工程',        cls:'bg-sky-500/20 text-sky-300 border-sky-500/30' },
-              { label:'異常偵測分數',    cls:'bg-amber-500/20 text-amber-300 border-amber-500/30' },
-              { label:'GNN 嵌入',        cls:'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' },
-              { label:'特徵篩選 (63)',   cls:'bg-purple-500/20 text-purple-300 border-purple-500/30' },
-              { label:'Pseudo Labeling', cls:'bg-pink-500/20 text-pink-300 border-pink-500/30' },
+              { label:'特徵工程 (79)',    cls:'bg-sky-500/20 text-sky-300 border-sky-500/30' },
+              { label:'異常偵測 (+3)',    cls:'bg-amber-500/20 text-amber-300 border-amber-500/30' },
+              { label:'GNN 嵌入 (+16)',   cls:'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' },
+              { label:'零方差/高相關/重要性篩選', cls:'bg-purple-500/20 text-purple-300 border-purple-500/30' },
+              { label:'移除受保護屬性',  cls:'bg-red-500/20 text-red-300 border-red-500/30' },
               { label:'Stacking 集成',   cls:'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' },
               { label:'SHAP 解釋',       cls:'bg-yellow-500/20 text-yellow-300 border-yellow-500/30' },
             ].reduce<React.ReactNode[]>((acc, step, i) => {
