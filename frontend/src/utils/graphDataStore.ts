@@ -617,6 +617,68 @@ export function hasGraphData(userId: number): boolean {
   return nodeMap.has(`user_${userId}`);
 }
 
+export interface WalletSearchResult {
+  walletId: string;   // e.g. 'wallet_abc123'
+  userId: number;     // connected user's numeric id
+  riskScore: number;  // connected user's risk score
+  relationType: 'R1' | 'R3'; // R1=wallet→user, R3=user→wallet
+}
+
+/**
+ * Given a partial wallet ID query (e.g. "abc123" or "wallet_abc123"),
+ * returns all (wallet, user) pairs where the wallet ID contains the query.
+ * Only user nodes are returned as center candidates.
+ */
+export async function findUsersByWalletId(query: string): Promise<WalletSearchResult[]> {
+  await loadGraphData();
+  const nm = nodeMap!;
+  const adj = adjMap!;
+
+  const normalised = query.trim().toLowerCase();
+  if (!normalised) return [];
+
+  const results: WalletSearchResult[] = [];
+  const seen = new Set<string>(); // walletId|userId dedup
+
+  for (const [nodeId, rec] of nm.entries()) {
+    if (rec.nodeType !== 'wallet') continue;
+    if (!nodeId.toLowerCase().includes(normalised)) continue;
+
+    // Find connected user nodes through edges
+    const edges = adj.get(nodeId) ?? [];
+    for (const edge of edges) {
+      let userKey: string;
+      let relType: 'R1' | 'R3';
+
+      if (edge.edgeType === 'wallet_funds_user' && edge.source === nodeId) {
+        userKey = edge.target;
+        relType = 'R1';
+      } else if (edge.edgeType === 'user_sends_wallet' && edge.target === nodeId) {
+        userKey = edge.source;
+        relType = 'R3';
+      } else {
+        continue;
+      }
+
+      const userRec = nm.get(userKey);
+      if (!userRec || userRec.nodeType !== 'user') continue;
+
+      const key = `${nodeId}|${userRec.numericId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      results.push({
+        walletId: nodeId,
+        userId: userRec.numericId,
+        riskScore: userRec.riskScore,
+        relationType: relType,
+      });
+    }
+  }
+
+  return results.sort((a, b) => b.riskScore - a.riskScore);
+}
+
 export async function getComputedNodeDetail(userId: number): Promise<NodeDetailResponse | null> {
   await Promise.all([loadGraphData(), loadShapData()]);
   const nm = nodeMap!;
