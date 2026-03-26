@@ -13,13 +13,19 @@ export function PredictStatsPanel() {
   const normal = total - blacklist;
   const blacklistRatio = total > 0 ? (blacklist / total * 100).toFixed(2) : '0';
 
-  // Risk distribution
+  // Risk distribution（閾值 0.8415 切分詐騙判定）
+  const THRESHOLD = 0.8415;
   const buckets = [0, 0, 0, 0, 0];
   for (const n of predictNodes) {
-    const idx = Math.min(Math.floor(n.risk_score / 0.2), 4);
+    let idx: number;
+    if      (n.risk_score < 0.2)       idx = 0;
+    else if (n.risk_score < 0.4)       idx = 1;
+    else if (n.risk_score < 0.6)       idx = 2;
+    else if (n.risk_score < THRESHOLD) idx = 3;
+    else                               idx = 4;
     buckets[idx]++;
   }
-  const labels = ['[0, 0.2)', '[0.2, 0.4)', '[0.4, 0.6)', '[0.6, 0.8)', '[0.8, 1.0]'];
+  const labels = ['[0, 0.2)', '[0.2, 0.4)', '[0.4, 0.6)', '[0.6, 0.8415)', '[0.8415, 1.0]'];
   const colors = ['bg-emerald-500', 'bg-sky-500', 'bg-yellow-500', 'bg-orange-500', 'bg-red-500'];
 
   return (

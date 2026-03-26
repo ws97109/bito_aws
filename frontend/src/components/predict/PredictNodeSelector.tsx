@@ -32,13 +32,12 @@ export function PredictNodeSelector() {
     }
   }, [dispatch, loadSubgraph, state.subgraphCache]);
 
-  const getScoreBadge = (riskScore: number, isBlack: boolean) => {
-    if (isBlack) {
-      if (riskScore > 0.8) return { cls: 'bg-red-900/60 text-red-300 ring-1 ring-red-500/50', label: '極高' };
-      return { cls: 'bg-orange-900/60 text-orange-300 ring-1 ring-orange-500/50', label: '高' };
-    }
-    if (riskScore > 0.4) return { cls: 'bg-yellow-900/60 text-yellow-300 ring-1 ring-yellow-500/50', label: '中' };
-    return { cls: 'bg-slate-700/60 text-slate-300 ring-1 ring-slate-500/50', label: '低' };
+  const getScoreBadge = (riskScore: number) => {
+    if      (riskScore >= 0.8415) return { cls: 'bg-red-900/60 text-red-300 ring-1 ring-red-500/50',         label: '極高' };
+    else if (riskScore >= 0.6)    return { cls: 'bg-orange-900/60 text-orange-300 ring-1 ring-orange-500/50', label: '高' };
+    else if (riskScore >= 0.4)    return { cls: 'bg-yellow-900/60 text-yellow-300 ring-1 ring-yellow-500/50', label: '中' };
+    else if (riskScore >= 0.2)    return { cls: 'bg-sky-900/60 text-sky-300 ring-1 ring-sky-500/50',          label: '中低' };
+    else                          return { cls: 'bg-slate-700/60 text-slate-300 ring-1 ring-slate-500/50',    label: '低' };
   };
 
   return (
@@ -96,7 +95,7 @@ export function PredictNodeSelector() {
             {filtered.slice(0, 200).map(node => {
               const isSelected = selectedUserId === node.user_id;
               const isBlack = node.is_blacklist === 1;
-              const badge = getScoreBadge(node.risk_score, isBlack);
+              const badge = getScoreBadge(node.risk_score);
               return (
                 <li key={node.user_id}>
                   <button

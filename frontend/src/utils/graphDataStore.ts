@@ -275,7 +275,7 @@ async function loadFeaturesData(): Promise<void> {
 
 async function loadShapData(): Promise<void> {
   if (shapMap !== null) return;
-  const text = await fetchCsv('/output/shap_values.csv');
+  const text = await fetchCsv('/output/shap_values_all_top10.csv');
   const records = parseCsvRecords(text);
   const sm = new Map<number, Record<string, string>>();
   for (const row of records) {
@@ -381,7 +381,7 @@ export async function getComputedStats(): Promise<StatsResponse> {
   const nm = nodeMap!;
   const edges = allEdges!;
 
-  const FRAUD_THRESHOLD = 0.8743;
+  const FRAUD_THRESHOLD = 0.8415;
 
   let fraudNodes = 0;
   let totalNodes = 0;
@@ -419,8 +419,8 @@ export async function getComputedStats(): Promise<StatsResponse> {
       { range: '[0, 0.2)',        count: riskBuckets[0] },
       { range: '[0.2, 0.4)',      count: riskBuckets[1] },
       { range: '[0.4, 0.6)',      count: riskBuckets[2] },
-      { range: '[0.6, 0.8743)',   count: riskBuckets[3] },
-      { range: '[0.8743, 1.0]',   count: riskBuckets[4] },
+      { range: '[0.6, 0.8415)',   count: riskBuckets[3] },
+      { range: '[0.8415, 1.0]',   count: riskBuckets[4] },
     ],
     relation_counts,
   };
@@ -429,20 +429,19 @@ export async function getComputedStats(): Promise<StatsResponse> {
 export async function getBlacklistNodes(): Promise<FraudNode[]> {
   if (blacklistCache) return blacklistCache;
 
-  // Load graph data so gnn_node_list is available
-  await loadGraphData();
-
-  const text = await fetchCsv('/output/blacklist_analysis.csv');
-  const blacklistMap = new Map<number, number>(); // user_id → risk_score
+  // 來源：all_user_risk_scores.csv，排除 true_label 為空白的預測目標用戶
+  const text = await fetchCsv('/output/all_user_risk_scores.csv');
+  const result: FraudNode[] = [];
   for (const r of parseCsvRecords(text)) {
-    const uid = parseInt(r['user_id'] ?? '0', 10);
+    const label = r['true_label']?.trim();
+    if (!label || label === '') continue; // 跳過 true_label 空白
+    const uid = parseInt(r['user_id'] ?? '', 10);
     const score = parseFloat(r['risk_score'] ?? '0');
-    if (!isNaN(uid)) blacklistMap.set(uid, score);
+    if (isNaN(uid)) continue;
+    result.push({ user_id: uid, risk_score: score });
   }
 
-  blacklistCache = Array.from(blacklistMap.entries())
-    .map(([user_id, risk_score]) => ({ user_id, risk_score }))
-    .sort((a, b) => b.risk_score - a.risk_score);
+  blacklistCache = result.sort((a, b) => b.risk_score - a.risk_score);
   return blacklistCache;
 }
 
@@ -457,15 +456,15 @@ export async function getFpFnData(): Promise<{ fp: FpFnNode[]; fn: FpFnNode[] }>
   const fp: FpFnNode[] = [];
   const fn: FpFnNode[] = [];
 
+  const THRESHOLD = 0.8415;
   for (const r of records) {
     const label = r['true_label']?.trim();
     if (label !== '0' && label !== '1') continue; // 跳過預測目標（空白）
 
-    const user_id        = parseInt(r['user_id'] ?? '', 10);
-    const risk_score     = parseFloat(r['risk_score'] ?? '0');
-    const predicted      = parseInt(r['predicted_blacklist'] ?? '0', 10);
-    const actual         = parseInt(label, 10) as 0 | 1;
-    const pred           = (predicted === 1 ? 1 : 0) as 0 | 1;
+    const user_id    = parseInt(r['user_id'] ?? '', 10);
+    const risk_score = parseFloat(r['risk_score'] ?? '0');
+    const actual     = parseInt(label, 10) as 0 | 1;
+    const pred       = risk_score >= THRESHOLD ? 1 : 0;
 
     if (isNaN(user_id)) continue;
 
@@ -490,15 +489,15 @@ export async function getPredictData(): Promise<PredictNode[]> {
   const text = await fetchCsv('/output/predict_detail.csv');
   const records = parseCsvRecords(text);
 
-  // Get feature column names (everything except user_id, risk_score, is_blacklist)
-  const metaCols = new Set(['user_id', 'risk_score', 'is_blacklist']);
+  // predict_detail.csv 欄位：user_id, risk_score, status（1=黑名單/0=正常）
+  const metaCols = new Set(['user_id', 'risk_score', 'status']);
   const firstRow = records[0];
   const featureCols = firstRow ? Object.keys(firstRow).filter(k => !metaCols.has(k)) : [];
 
   predictCache = records.map(r => {
     const uid = parseInt(r['user_id'] ?? '0', 10);
     const riskScore = parseFloat(r['risk_score'] ?? '0');
-    const isBlacklist = parseInt(r['is_blacklist'] ?? '0', 10) as 0 | 1;
+    const isBlacklist = parseInt(r['status'] ?? '0', 10) as 0 | 1;
 
     // Extract non-null SHAP features (top-10 have values, rest are empty)
     const shapFeatures: ShapFeature[] = [];
@@ -731,12 +730,13 @@ export async function getConfusionMatrix(): Promise<ConfusionMatrixData> {
 
   // 從 all_user_risk_scores.csv 直接算全部 TP / TN
   const text = await fetchCsv('/output/all_user_risk_scores.csv');
+  const THRESHOLD = 0.8415;
   let tp = 0, tn = 0;
   for (const r of parseCsvRecords(text)) {
     const label = r['true_label']?.trim();
     if (label !== '0' && label !== '1') continue;
     const actual    = parseInt(label, 10);
-    const predicted = parseInt(r['predicted_blacklist'] ?? '0', 10);
+    const predicted = parseFloat(r['risk_score'] ?? '0') >= THRESHOLD ? 1 : 0;
     if (actual === 1 && predicted === 1) tp++;
     else if (actual === 0 && predicted === 0) tn++;
   }
@@ -753,7 +753,7 @@ export async function getConfusionMatrix(): Promise<ConfusionMatrixData> {
     recall,
     f1:          precision + recall > 0 ? 2 * precision * recall / (precision + recall) : 0,
     specificity: tn + fp > 0 ? tn / (tn + fp) : 0,
-    threshold:   0.8743,
+    threshold:   0.8415,
   };
 }
 

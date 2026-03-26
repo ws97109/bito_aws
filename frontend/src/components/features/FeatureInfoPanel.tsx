@@ -113,8 +113,8 @@ function ShapBarChart({ data, title, subtitle, color }: {
     );
   }
 
-  // Recharts 需要由下到上，所以 reverse
-  const chartData = [...data].reverse();
+  // 直接使用原始順序：rank1(最重要)在陣列最前 → Recharts 由上往下渲染 → 多到少
+  const chartData = [...data];
 
   return (
     <div>
@@ -187,7 +187,7 @@ function CompareChart({ allData, blacklistData }: { allData: ShapTop20Entry[]; b
     };
   }).sort((x, y) => Math.max(y.all, y.blacklist) - Math.max(x.all, x.blacklist));
 
-  const chartData = [...merged].reverse();
+  const chartData = [...merged]; // 已降冪排列，最重要在頂端
 
   return (
     <div>

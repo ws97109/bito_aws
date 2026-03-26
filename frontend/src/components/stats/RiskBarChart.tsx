@@ -53,7 +53,7 @@ export function RiskBarChart({ data }: RiskBarChartProps) {
                   </div>
                   {isFraud && (
                     <div className="mt-1.5 pt-1.5 border-t border-slate-700 text-red-400 text-[10px]">
-                      ≥ 0.8743 詐騙判定閾值
+                      ≥ 0.8415 詐騙判定閾值
                     </div>
                   )}
                 </div>
@@ -66,7 +66,7 @@ export function RiskBarChart({ data }: RiskBarChartProps) {
             stroke="#ef4444"
             strokeDasharray="4 3"
             strokeOpacity={0.5}
-            label={{ value: '閾值 0.8743', position: 'insideTopRight', fontSize: 9, fill: '#ef4444', dy: -14 }}
+            label={{ value: '閾值 0.8415', position: 'insideTopRight', fontSize: 9, fill: '#ef4444', dy: -14 }}
           />
           <Bar dataKey="count" radius={[4, 4, 0, 0]} label={{ position: 'top', fontSize: 9, fill: '#64748b' }}>
             {chartData.map((_, index) => (

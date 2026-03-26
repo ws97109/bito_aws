@@ -1,20 +1,17 @@
-import { useMemo } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import { useDashboard } from '../../context/DashboardContext';
-import type { ShapFeature } from '../../types/index';
+import { getShapForUser } from '../../utils/graphDataStore';
+import type { ShapWaterfallFeature, ShapWaterfallResponse } from '../../types/index';
 
-// ── Waterfall chart (same style as FP/FN ShapPanel) ──────────────────────────
-
-const BASE_VALUE = -2.885;
+// ── Waterfall chart ───────────────────────────────────────────────────────────
 
 interface PredictWaterfallProps {
-  features: ShapFeature[];
+  features: ShapWaterfallFeature[];
   baseValue: number;
 }
 
 function PredictWaterfall({ features, baseValue }: PredictWaterfallProps) {
-  const sorted = [...features]
-    .sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution))
-    .slice(0, 10);
+  const sorted = features.slice(0, 10);
 
   const finalValue = baseValue + sorted.reduce((s, f) => s + f.contribution, 0);
 
@@ -160,11 +157,21 @@ function PredictWaterfall({ features, baseValue }: PredictWaterfallProps) {
 export function PredictDetailPanel() {
   const { state } = useDashboard();
   const { selectedUserId, predictNodes } = state;
+  const [shapData, setShapData] = useState<ShapWaterfallResponse | null>(null);
+  const [shapLoading, setShapLoading] = useState(false);
 
   const selectedNode = useMemo(() => {
     if (selectedUserId == null) return null;
     return predictNodes.find(n => n.user_id === selectedUserId) ?? null;
   }, [selectedUserId, predictNodes]);
+
+  useEffect(() => {
+    if (selectedUserId == null) { setShapData(null); return; }
+    setShapLoading(true);
+    getShapForUser('fp', selectedUserId)
+      .then(setShapData)
+      .finally(() => setShapLoading(false));
+  }, [selectedUserId]);
 
   if (!selectedNode) {
     return (
@@ -172,7 +179,7 @@ export function PredictDetailPanel() {
     );
   }
 
-  const { user_id, risk_score, is_blacklist, shap_features } = selectedNode;
+  const { user_id, risk_score, is_blacklist } = selectedNode;
   const isBlack = is_blacklist === 1;
 
   return (
@@ -237,10 +244,12 @@ export function PredictDetailPanel() {
 
         {/* Chart area */}
         <div className="bg-slate-900/40 rounded-lg px-2 py-1.5 ring-1 ring-slate-700/40">
-          {shap_features.length === 0 ? (
-            <p className="text-xs text-slate-400 text-center py-4">SHAP 資料不可用</p>
+          {shapLoading ? (
+            <p className="text-xs text-slate-400 text-center py-4 animate-pulse">載入 SHAP 資料中...</p>
+          ) : shapData && shapData.features.length > 0 ? (
+            <PredictWaterfall features={shapData.features} baseValue={shapData.base_value} />
           ) : (
-            <PredictWaterfall features={shap_features} baseValue={BASE_VALUE} />
+            <p className="text-xs text-slate-400 text-center py-4">此用戶無 SHAP 資料</p>
           )}
         </div>
       </div>
