@@ -786,47 +786,62 @@ export interface ConfusionMatrixData {
 }
 
 export async function getConfusionMatrix(): Promise<ConfusionMatrixData> {
-  // 來源：test_predictions.csv（只有 test set，模型未見過的資料）
-  // 欄位：user_id, true_label, risk_score, pred_label
-  const text = await fetchCsv('/output/test_predictions.csv');
+  const THRESHOLD = 0.8415;
+
+  // ── 混淆矩陣：用全部資料（train+test）──
+  const allText = await fetchCsv('/output/all_user_risk_scores.csv');
   let tp = 0, fp = 0, fn = 0, tn = 0;
-  for (const r of parseCsvRecords(text)) {
+  for (const r of parseCsvRecords(allText)) {
+    const label = r['true_label']?.trim();
+    if (label !== '0' && label !== '1') continue;
+    const actual    = parseInt(label, 10);
+    const predicted = parseFloat(r['risk_score'] ?? '0') >= THRESHOLD ? 1 : 0;
+    if (actual === 1 && predicted === 1) tp++;
+    else if (actual === 0 && predicted === 1) fp++;
+    else if (actual === 1 && predicted === 0) fn++;
+    else if (actual === 0 && predicted === 0) tn++;
+  }
+  const total = tp + fp + tn + fn;
+
+  // ── 指標：用 test set only ──
+  const testText = await fetchCsv('/output/test_predictions.csv');
+  let tTp = 0, tFp = 0, tFn = 0, tTn = 0;
+  for (const r of parseCsvRecords(testText)) {
     const actual = parseInt(r['true_label'] ?? '', 10);
     const pred   = parseInt(r['pred_label'] ?? '', 10);
     if (isNaN(actual) || isNaN(pred)) continue;
-    if (actual === 1 && pred === 1) tp++;
-    else if (actual === 0 && pred === 1) fp++;
-    else if (actual === 1 && pred === 0) fn++;
-    else if (actual === 0 && pred === 0) tn++;
+    if (actual === 1 && pred === 1) tTp++;
+    else if (actual === 0 && pred === 1) tFp++;
+    else if (actual === 1 && pred === 0) tFn++;
+    else if (actual === 0 && pred === 0) tTn++;
   }
-
-  const total = tp + fp + tn + fn;
+  const tTotal = tTp + tFp + tFn + tTn;
 
   // 黑名單 (class=1) 的 precision / recall / f1
-  const precision = tp + fp > 0 ? tp / (tp + fp) : 0;
-  const recall    = tp + fn > 0 ? tp / (tp + fn) : 0;
+  const precision = tTp + tFp > 0 ? tTp / (tTp + tFp) : 0;
+  const recall    = tTp + tFn > 0 ? tTp / (tTp + tFn) : 0;
   const f1Black   = precision + recall > 0 ? 2 * precision * recall / (precision + recall) : 0;
 
-  // 正常 (class=0) 的 precision / recall / f1
-  const precNormal  = tn + fn > 0 ? tn / (tn + fn) : 0;
-  const recNormal   = tn + fp > 0 ? tn / (tn + fp) : 0;
-  const f1Normal    = precNormal + recNormal > 0 ? 2 * precNormal * recNormal / (precNormal + recNormal) : 0;
+  // 正常 (class=0) 的 f1
+  const precNormal = tTn + tFn > 0 ? tTn / (tTn + tFn) : 0;
+  const recNormal  = tTn + tFp > 0 ? tTn / (tTn + tFp) : 0;
+  const f1Normal   = precNormal + recNormal > 0 ? 2 * precNormal * recNormal / (precNormal + recNormal) : 0;
 
-  // Weighted F1（依各類樣本數加權）
-  const supportBlack  = tp + fn;
-  const supportNormal = tn + fp;
-  const f1Weighted    = total > 0 ? (f1Normal * supportNormal + f1Black * supportBlack) / total : 0;
+  // Weighted F1
+  const supportBlack  = tTp + tFn;
+  const supportNormal = tTn + tFp;
+  const f1Weighted    = tTotal > 0 ? (f1Normal * supportNormal + f1Black * supportBlack) / tTotal : 0;
 
   return {
     tp, fp, tn, fn, total,
-    accuracy:    total > 0 ? (tp + tn) / total : 0,
+    accuracy:    tTotal > 0 ? (tTp + tTn) / tTotal : 0,
     precision,
     recall,
     f1:          f1Black,
     f1Normal,
     f1Weighted,
-    specificity: tn + fp > 0 ? tn / (tn + fp) : 0,
-    threshold:   0.8415,
+    specificity: tTn + tFp > 0 ? tTn / (tTn + tFp) : 0,
+    threshold:   THRESHOLD,
   };
 }
 
