@@ -16,7 +16,7 @@ export function RiskBarChart({ data }: RiskBarChartProps) {
         風險分布
       </h3>
       <ResponsiveContainer width="100%" height={175}>
-        <BarChart data={chartData} margin={{ top: 16, right: 4, bottom: 4, left: -24 }}>
+        <BarChart data={chartData} margin={{ top: 16, right: 4, bottom: 4, left: -8 }}>
           <XAxis dataKey="range" tick={{ fontSize: 10, fill: '#64748b' }} interval={0} />
           <YAxis tick={{ fontSize: 10, fill: '#64748b' }} allowDecimals={false} />
           <Tooltip
