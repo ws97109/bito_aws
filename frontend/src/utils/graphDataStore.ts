@@ -258,14 +258,19 @@ async function loadGraphData(): Promise<void> {
 
 async function loadFeaturesData(): Promise<void> {
   if (featuresMap !== null) return;
-  const text = await fetchCsv('/output/features.csv');
-  const records = parseCsvRecords(text);
-  const fm = new Map<number, Record<string, string>>();
-  for (const row of records) {
-    const uid = parseInt(row['user_id'] ?? '', 10);
-    if (!isNaN(uid)) fm.set(uid, row);
+  try {
+    const text = await fetchCsv('/output/features.csv');
+    const records = parseCsvRecords(text);
+    const fm = new Map<number, Record<string, string>>();
+    for (const row of records) {
+      const uid = parseInt(row['user_id'] ?? '', 10);
+      if (!isNaN(uid)) fm.set(uid, row);
+    }
+    featuresMap = fm;
+  } catch {
+    // features.csv is optional; SHAP waterfall will omit raw feature values
+    featuresMap = new Map();
   }
-  featuresMap = fm;
 }
 
 async function loadShapData(): Promise<void> {

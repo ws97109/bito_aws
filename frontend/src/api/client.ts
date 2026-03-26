@@ -5,7 +5,8 @@ export class ApiError extends Error {
   }
 }
 
-// Placeholder - real implementation would do: const res = await fetch(url); ...
 export async function apiFetch<T>(url: string): Promise<T> {
-  throw new ApiError(404, `Not found: ${url}`);
+  const res = await fetch(url);
+  if (!res.ok) throw new ApiError(res.status, `${res.status} ${res.statusText}: ${url}`);
+  return res.json() as Promise<T>;
 }
