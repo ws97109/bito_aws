@@ -7,10 +7,71 @@ import { DashboardSwitcher } from '../fpfn/DashboardSwitcher';
 import { FpFnStatsPanel } from '../fpfn/FpFnStatsPanel';
 import { FpFnNodeSelector } from '../fpfn/FpFnNodeSelector';
 import { ShapPanel } from '../fpfn/ShapPanel';
+import { PredictStatsPanel } from '../predict/PredictStatsPanel';
+import { PredictNodeSelector } from '../predict/PredictNodeSelector';
+import { PredictDetailPanel } from '../predict/PredictDetailPanel';
 
 export function Dashboard() {
   const { state } = useDashboard();
   const isFpFnMode = state.dashboardMode === 'fp-fn';
+  const isPredictMode = state.dashboardMode === 'predict';
+
+  const renderLeftPanel = () => {
+    if (isPredictMode) return <PredictStatsPanel />;
+    if (isFpFnMode) return <FpFnStatsPanel />;
+    return <StatsPanel />;
+  };
+
+  const renderRightContent = () => {
+    if (isPredictMode) {
+      return (
+        <main className="flex-1 overflow-y-auto min-w-0 min-h-0">
+          <div className="flex flex-col gap-4">
+            <div className="bg-slate-800/50 backdrop-blur-sm ring-1 ring-slate-700/60 rounded-xl shadow-2xl p-4 flex flex-col">
+              <PredictNodeSelector />
+            </div>
+            <div className="bg-slate-800/50 backdrop-blur-sm ring-1 ring-slate-700/60 rounded-xl shadow-2xl px-4 py-3">
+              <PredictDetailPanel />
+            </div>
+          </div>
+        </main>
+      );
+    }
+
+    if (isFpFnMode) {
+      return (
+        <main className="flex-1 overflow-y-auto min-w-0 min-h-0">
+          <div className="flex flex-col gap-4">
+            <div className="bg-slate-800/50 backdrop-blur-sm ring-1 ring-slate-700/60 rounded-xl shadow-2xl p-4 flex flex-col">
+              <FpFnNodeSelector />
+              <div className="mt-3" style={{ height: '500px' }} onWheel={e => e.stopPropagation()}>
+                <GraphViewer />
+              </div>
+            </div>
+            <div className="bg-slate-800/50 backdrop-blur-sm ring-1 ring-slate-700/60 rounded-xl shadow-2xl px-4 py-3">
+              <ShapPanel />
+            </div>
+          </div>
+        </main>
+      );
+    }
+
+    return (
+      <main className="flex-1 overflow-y-auto min-w-0 min-h-0">
+        <div className="flex flex-col gap-4">
+          <div className="bg-slate-800/50 backdrop-blur-sm ring-1 ring-slate-700/60 rounded-xl shadow-2xl p-4 flex flex-col">
+            <NodeSelector />
+            <div className="mt-3" style={{ height: '500px' }} onWheel={e => e.stopPropagation()}>
+              <GraphViewer />
+            </div>
+          </div>
+          <div className="bg-slate-800/50 backdrop-blur-sm ring-1 ring-slate-700/60 rounded-xl shadow-2xl px-4 py-3">
+            <NodeDetailPanel />
+          </div>
+        </div>
+      </main>
+    );
+  };
 
   return (
     <div className="flex flex-col h-screen text-slate-200 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
@@ -36,46 +97,13 @@ export function Dashboard() {
         {/* Left Panel */}
         <aside className="w-full lg:w-72 bg-slate-800/50 backdrop-blur-sm ring-1 ring-slate-700/60 rounded-xl shadow-2xl overflow-y-auto flex-shrink-0">
           <div className="p-4 space-y-4">
-            {/* Dashboard mode switcher — always visible at the top */}
             <DashboardSwitcher />
-
-            {/* Stats area — changes based on mode */}
-            {isFpFnMode ? <FpFnStatsPanel /> : <StatsPanel />}
+            {renderLeftPanel()}
           </div>
         </aside>
 
         {/* Right Content */}
-        {isFpFnMode ? (
-          /* FP/FN mode: node selector + graph (top) + SHAP panel (bottom) */
-          <main className="flex-1 overflow-y-auto min-w-0 min-h-0">
-            <div className="flex flex-col gap-4">
-              <div className="bg-slate-800/50 backdrop-blur-sm ring-1 ring-slate-700/60 rounded-xl shadow-2xl p-4 flex flex-col">
-                <FpFnNodeSelector />
-                <div className="mt-3" style={{ height: '500px' }} onWheel={e => e.stopPropagation()}>
-                  <GraphViewer />
-                </div>
-              </div>
-              <div className="bg-slate-800/50 backdrop-blur-sm ring-1 ring-slate-700/60 rounded-xl shadow-2xl px-4 py-3">
-                <ShapPanel />
-              </div>
-            </div>
-          </main>
-        ) : (
-          /* Fraud detection mode: original layout */
-          <main className="flex-1 overflow-y-auto min-w-0 min-h-0">
-            <div className="flex flex-col gap-4">
-              <div className="bg-slate-800/50 backdrop-blur-sm ring-1 ring-slate-700/60 rounded-xl shadow-2xl p-4 flex flex-col">
-                <NodeSelector />
-                <div className="mt-3" style={{ height: '500px' }} onWheel={e => e.stopPropagation()}>
-                  <GraphViewer />
-                </div>
-              </div>
-              <div className="bg-slate-800/50 backdrop-blur-sm ring-1 ring-slate-700/60 rounded-xl shadow-2xl px-4 py-3">
-                <NodeDetailPanel />
-              </div>
-            </div>
-          </main>
-        )}
+        {renderRightContent()}
       </div>
     </div>
   );

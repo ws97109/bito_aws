@@ -11,7 +11,7 @@ interface WaterfallChartProps {
 }
 
 function WaterfallChart({ features, baseValue }: WaterfallChartProps) {
-  // Sort by |contribution| desc, cap at 8 rows for readability
+  // Sort by |contribution| desc, cap at 10 rows
   const sorted = [...features]
     .sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution))
     .slice(0, 10);
@@ -31,18 +31,18 @@ function WaterfallChart({ features, baseValue }: WaterfallChartProps) {
   const allX = [baseValue, finalValue, ...rows.flatMap(r => [r.start, r.end])];
   const xMin = Math.min(...allX);
   const xMax = Math.max(...allX);
-  const xPad = (xMax - xMin) * 0.12;
+  const xPad = (xMax - xMin) * 0.15;
   const xLo = xMin - xPad;
   const xHi = xMax + xPad;
 
-  // Layout constants
-  const ROW_H   = 22;
-  const BAR_H   = 12;
-  const LABEL_W = 160;
-  const TOTAL_W = 560;
+  // Layout constants — wider label area for Chinese text
+  const ROW_H   = 26;
+  const BAR_H   = 14;
+  const LABEL_W = 200;
+  const TOTAL_W = 600;
   const BAR_AREA = TOTAL_W - LABEL_W - 6;
-  const PAD_T   = 20;
-  const PAD_B   = 20;
+  const PAD_T   = 28;
+  const PAD_B   = 28;
   const TOTAL_H = rows.length * ROW_H + PAD_T + PAD_B;
 
   const toX = (v: number) => LABEL_W + ((v - xLo) / (xHi - xLo)) * BAR_AREA;
@@ -53,17 +53,24 @@ function WaterfallChart({ features, baseValue }: WaterfallChartProps) {
       width="100%"
       style={{ display: 'block' }}
     >
-      {/* Final prediction value at top */}
+      {/* Final prediction label at top */}
       <text
-        x={toX(finalValue)} y={PAD_T - 7}
-        textAnchor="middle" fontSize="10" fontFamily="monospace"
+        x={toX(finalValue)} y={PAD_T - 14}
+        textAnchor="middle" fontSize="9"
+        fill="#64748b"
+      >
+        預測值
+      </text>
+      <text
+        x={toX(finalValue)} y={PAD_T - 4}
+        textAnchor="middle" fontSize="11" fontFamily="monospace"
         fill="#94a3b8" fontWeight="bold"
       >
-        {finalValue.toFixed(3)}
+        f(x) = {finalValue.toFixed(3)}
       </text>
       <line
-        x1={toX(finalValue)} y1={PAD_T - 3}
-        x2={toX(finalValue)} y2={PAD_T + 3}
+        x1={toX(finalValue)} y1={PAD_T}
+        x2={toX(finalValue)} y2={PAD_T + 4}
         stroke="#64748b" strokeWidth="1"
       />
 
@@ -75,10 +82,10 @@ function WaterfallChart({ features, baseValue }: WaterfallChartProps) {
         const x2     = toX(Math.max(row.start, row.end));
         const barW   = Math.max(x2 - x1, 2);
         const fill   = isPos ? '#ef4444' : '#3b82f6';
-        const fillBg = isPos ? 'rgba(239,68,68,0.18)' : 'rgba(59,130,246,0.18)';
+        const fillBg = isPos ? 'rgba(239,68,68,0.12)' : 'rgba(59,130,246,0.12)';
         const txtClr = isPos ? '#fca5a5' : '#93c5fd';
         const valTxt = (isPos ? '+' : '') + row.feature.contribution.toFixed(2);
-        const connX  = toX(row.start); // connector anchor = start of THIS bar = end of NEXT
+        const connX  = toX(row.start);
 
         return (
           <g key={i}>
@@ -99,35 +106,35 @@ function WaterfallChart({ features, baseValue }: WaterfallChartProps) {
               />
             )}
 
-            {/* Feature value label — right-aligned in label area */}
+            {/* Feature name — left-aligned */}
             <text
-              x={LABEL_W - 68} y={y + 4}
+              x={4} y={y + 4}
+              textAnchor="start" fontSize="10"
+              fill="#e2e8f0"
+            >
+              {row.feature.feature_name}
+            </text>
+
+            {/* Feature value — right-aligned before bar area */}
+            <text
+              x={LABEL_W - 6} y={y + 4}
               textAnchor="end" fontSize="9" fontFamily="monospace"
               fill="#64748b"
             >
               {row.feature.feature_value}
             </text>
 
-            {/* "= feature_name" */}
-            <text
-              x={LABEL_W - 64} y={y + 4}
-              textAnchor="start" fontSize="9.5"
-              fill="#94a3b8"
-            >
-              {`= ${row.feature.feature_name}`}
-            </text>
-
             {/* Background wash */}
-            <rect x={x1} y={y - BAR_H / 2} width={barW} height={BAR_H} rx={2} fill={fillBg} />
+            <rect x={x1} y={y - BAR_H / 2} width={barW} height={BAR_H} rx={3} fill={fillBg} />
             {/* Bar */}
-            <rect x={x1} y={y - BAR_H / 2} width={barW} height={BAR_H} rx={2} fill={fill} opacity={0.82} />
+            <rect x={x1} y={y - BAR_H / 2} width={barW} height={BAR_H} rx={3} fill={fill} opacity={0.82} />
 
             {/* Contribution label outside bar */}
             <text
-              x={isPos ? x2 + 3 : x1 - 3}
+              x={isPos ? x2 + 4 : x1 - 4}
               y={y + 4}
               textAnchor={isPos ? 'start' : 'end'}
-              fontSize="9.5" fontFamily="monospace" fontWeight="bold"
+              fontSize="10" fontFamily="monospace" fontWeight="bold"
               fill={txtClr}
             >
               {valTxt}
@@ -136,13 +143,20 @@ function WaterfallChart({ features, baseValue }: WaterfallChartProps) {
         );
       })}
 
-      {/* Base value at bottom */}
+      {/* Base value label at bottom */}
       <text
-        x={toX(baseValue)} y={TOTAL_H - PAD_B + 16}
-        textAnchor="middle" fontSize="10" fontFamily="monospace"
+        x={toX(baseValue)} y={TOTAL_H - PAD_B + 12}
+        textAnchor="middle" fontSize="9"
+        fill="#64748b"
+      >
+        基準值
+      </text>
+      <text
+        x={toX(baseValue)} y={TOTAL_H - PAD_B + 23}
+        textAnchor="middle" fontSize="11" fontFamily="monospace"
         fill="#94a3b8" fontWeight="bold"
       >
-        {baseValue.toFixed(3)}
+        E[f(x)] = {baseValue.toFixed(3)}
       </text>
       <line
         x1={toX(baseValue)} y1={TOTAL_H - PAD_B - 3}
@@ -166,9 +180,19 @@ export function ShapPanel() {
 
   const isFp    = fpFnMode === 'fp';
   const title   = isFp ? 'FP SHAP 瀑布圖 — 為何誤判為詐騙?' : 'FN SHAP 瀑布圖 — 為何漏判詐騙?';
-  const insight = isFp
-    ? '共用 IP 與高風險鄰居是主要誤判原因。建議將圖結構距離納入後處理規則以降低 FP。'
-    : '帳戶年齡與低交易金額掩蓋了詐騙特徵，導致模型低估風險。孤立節點結構是漏判盲點。';
+
+  // Dynamic insight from actual SHAP data
+  const insight = (() => {
+    if (!shapWaterfall?.features?.length) return '';
+    const sorted = [...shapWaterfall.features].sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution));
+    const top3 = sorted.slice(0, 3).map(f => f.feature_name);
+    const posFeats = sorted.filter(f => f.contribution > 0).slice(0, 2).map(f => f.feature_name);
+    const negFeats = sorted.filter(f => f.contribution < 0).slice(0, 2).map(f => f.feature_name);
+    if (isFp) {
+      return `主要誤判因素：${posFeats.join('、') || top3.join('、')}。${negFeats.length ? `降低風險的特徵：${negFeats.join('、')}。` : ''}建議針對高 SHAP 貢獻特徵設計後處理規則以降低 FP。`;
+    }
+    return `主要漏判因素：${negFeats.join('、') || top3.join('、')} 掩蓋了詐騙特徵。${posFeats.length ? `偵測到的風險信號：${posFeats.join('、')}。` : ''}建議加強對這些特徵組合的監控。`;
+  })();
 
   return (
     <div className="space-y-2">

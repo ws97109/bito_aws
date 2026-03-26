@@ -6,7 +6,7 @@ import { Spinner } from '../common/Spinner';
 import { hasGraphData } from '../../utils/graphDataStore';
 
 export function getFilteredNodes(nodes: FraudNode[], keyword: string): FraudNode[] {
-  return nodes.filter(n => n.risk_score >= 0.5 && String(n.user_id).includes(keyword.trim()));
+  return nodes.filter(n => n.risk_score >= 0.4 && String(n.user_id).includes(keyword.trim()));
 }
 
 export function NodeSelector() {

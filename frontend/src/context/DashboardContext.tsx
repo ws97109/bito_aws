@@ -1,11 +1,12 @@
 import React, { createContext, useContext, useReducer, useCallback } from 'react';
-import type { DashboardState, StatsResponse, FraudNode, SubgraphResponse, NodeDetailResponse, FpFnNode, DashboardMode, FpFnMode, ShapWaterfallResponse } from '../types/index';
+import type { DashboardState, StatsResponse, FraudNode, SubgraphResponse, NodeDetailResponse, FpFnNode, PredictNode, DashboardMode, FpFnMode, ShapWaterfallResponse } from '../types/index';
 import { getStats } from '../api/statsApi';
 import { getFraudNodes } from '../api/fraudNodesApi';
 import { getSubgraph } from '../api/subgraphApi';
 import { getNodeDetail } from '../api/nodeApi';
 import { getFpFnNodes } from '../api/fpFnApi';
 import { getShapWaterfall } from '../api/shapApi';
+import { getPredictNodes } from '../api/predictApi';
 
 // ── Action Types ──────────────────────────────────────────────────────────────
 
@@ -28,6 +29,9 @@ type Action =
   | { type: 'SET_FPFN_NODES_LOADING' }
   | { type: 'SET_FPFN_NODES_SUCCESS'; fp: FpFnNode[]; fn: FpFnNode[] }
   | { type: 'SET_FPFN_NODES_ERROR'; error: string }
+  | { type: 'SET_PREDICT_NODES_LOADING' }
+  | { type: 'SET_PREDICT_NODES_SUCCESS'; data: PredictNode[] }
+  | { type: 'SET_PREDICT_NODES_ERROR'; error: string }
   | { type: 'SET_SHAP_LOADING' }
   | { type: 'SET_SHAP_SUCCESS'; data: ShapWaterfallResponse }
   | { type: 'SET_SHAP_ERROR'; error: string };
@@ -45,9 +49,10 @@ const initialState: DashboardState = {
   fpFnMode: 'fp',
   fpNodes: [],
   fnNodes: [],
+  predictNodes: [],
   shapWaterfall: null,
-  loading: { stats: false, fraudNodes: false, subgraph: false, nodeDetail: false, fpFnNodes: false, shapWaterfall: false },
-  error: { stats: null, fraudNodes: null, subgraph: null, nodeDetail: null, fpFnNodes: null, shapWaterfall: null },
+  loading: { stats: false, fraudNodes: false, subgraph: false, nodeDetail: false, fpFnNodes: false, predictNodes: false, shapWaterfall: false },
+  error: { stats: null, fraudNodes: null, subgraph: null, nodeDetail: null, fpFnNodes: null, predictNodes: null, shapWaterfall: null },
 };
 
 // ── Reducer ───────────────────────────────────────────────────────────────────
@@ -110,6 +115,13 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
     case 'SET_FPFN_NODES_ERROR':
       return { ...state, loading: { ...state.loading, fpFnNodes: false }, error: { ...state.error, fpFnNodes: action.error } };
 
+    case 'SET_PREDICT_NODES_LOADING':
+      return { ...state, loading: { ...state.loading, predictNodes: true }, error: { ...state.error, predictNodes: null } };
+    case 'SET_PREDICT_NODES_SUCCESS':
+      return { ...state, predictNodes: action.data, loading: { ...state.loading, predictNodes: false } };
+    case 'SET_PREDICT_NODES_ERROR':
+      return { ...state, loading: { ...state.loading, predictNodes: false }, error: { ...state.error, predictNodes: action.error } };
+
     case 'SET_SHAP_LOADING':
       return { ...state, loading: { ...state.loading, shapWaterfall: true }, error: { ...state.error, shapWaterfall: null } };
     case 'SET_SHAP_SUCCESS':
@@ -132,6 +144,7 @@ interface DashboardContextValue {
   loadSubgraph: (userId: number, hops?: number) => Promise<void>;
   loadNodeDetail: (userId: number) => Promise<void>;
   loadFpFnNodes: () => Promise<void>;
+  loadPredictNodes: () => Promise<void>;
   loadShapWaterfall: (mode: FpFnMode, userId?: number) => Promise<void>;
 }
 
@@ -192,6 +205,16 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const loadPredictNodes = useCallback(async () => {
+    dispatch({ type: 'SET_PREDICT_NODES_LOADING' });
+    try {
+      const data = await getPredictNodes();
+      dispatch({ type: 'SET_PREDICT_NODES_SUCCESS', data });
+    } catch (err) {
+      dispatch({ type: 'SET_PREDICT_NODES_ERROR', error: err instanceof Error ? err.message : 'Failed to load predict nodes' });
+    }
+  }, []);
+
   const loadShapWaterfall = useCallback(async (mode: FpFnMode, userId?: number) => {
     dispatch({ type: 'SET_SHAP_LOADING' });
     try {
@@ -203,7 +226,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <DashboardContext.Provider value={{ state, dispatch, loadStats, loadFraudNodes, loadSubgraph, loadNodeDetail, loadFpFnNodes, loadShapWaterfall }}>
+    <DashboardContext.Provider value={{ state, dispatch, loadStats, loadFraudNodes, loadSubgraph, loadNodeDetail, loadFpFnNodes, loadPredictNodes, loadShapWaterfall }}>
       {children}
     </DashboardContext.Provider>
   );

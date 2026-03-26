@@ -2,8 +2,9 @@ import { useDashboard } from '../../context/DashboardContext';
 import type { DashboardMode } from '../../types/index';
 
 const MODES: { mode: DashboardMode; label: string; icon: string }[] = [
-  { mode: 'fraud',  label: '詐騙偵測', icon: '&#128737;' },
-  { mode: 'fp-fn',  label: 'FP/FN 分析', icon: '&#9878;' },
+  { mode: 'fraud',   label: '詐騙偵測',   icon: '&#128737;' },
+  { mode: 'fp-fn',   label: 'FP/FN 分析', icon: '&#9878;' },
+  { mode: 'predict', label: 'Predict',    icon: '&#128269;' },
 ];
 
 export function DashboardSwitcher() {
