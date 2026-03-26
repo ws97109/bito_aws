@@ -30,6 +30,7 @@ catboost_info/
 Wei_model/model/catboost_info/
 
 # Model output (large files)
+.env
 Wei_model/output/
 !Wei_model/output/gnn_edge_list.csv
 !Wei_model/output/gnn_node_list.csv

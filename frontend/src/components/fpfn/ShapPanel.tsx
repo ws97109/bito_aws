@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useDashboard } from '../../context/DashboardContext';
 import type { ShapWaterfallFeature } from '../../types/index';
 import { Spinner } from '../common/Spinner';
+import { LLM_Model } from './LLM_Model';
 
 // ── Waterfall chart ───────────────────────────────────────────────────────────
 
@@ -195,6 +196,9 @@ export function ShapPanel() {
         <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">&#128161; 模型分析</p>
         <p className="text-xs text-slate-300 leading-relaxed">{insight}</p>
       </div>
+
+      {/* LLM misclassification analysis */}
+      <LLM_Model />
     </div>
   );
 }
