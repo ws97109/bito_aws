@@ -95,7 +95,7 @@ export function Dashboard() {
 
       <div className="flex-1 flex flex-col lg:flex-row gap-4 p-4 overflow-hidden min-h-0">
         {/* Left Panel */}
-        <aside className="w-full lg:w-72 bg-slate-800/50 backdrop-blur-sm ring-1 ring-slate-700/60 rounded-xl shadow-2xl overflow-y-auto flex-shrink-0">
+        <aside className="w-full lg:w-96 bg-slate-800/50 backdrop-blur-sm ring-1 ring-slate-700/60 rounded-xl shadow-2xl overflow-y-auto flex-shrink-0">
           <div className="p-4 space-y-4">
             <DashboardSwitcher />
             {renderLeftPanel()}

@@ -95,10 +95,6 @@ function NeighborList({ peers, label, color }: NeighborListProps) {
       <p className={`text-[10px] uppercase tracking-wider font-semibold mb-1 ${color}`}>{label}</p>
       <div className="space-y-1">
         {peers.map(p => {
-          const riskClr = p.risk_score >= 0.8743 ? 'text-red-400'
-            : p.risk_score >= 0.65 ? 'text-orange-400'
-            : p.risk_score >= 0.45 ? 'text-yellow-400'
-            : 'text-emerald-400';
           const label = p.node_type === 'wallet'
             ? (p.node_label ?? `wallet_${p.peer_id}`)
             : `User ${p.peer_id}`;
@@ -115,10 +111,10 @@ function NeighborList({ peers, label, color }: NeighborListProps) {
                 )}
               </div>
               <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                <span className={`font-mono text-xs font-semibold ${riskClr}`}>
-                  {(p.risk_score * 100).toFixed(0)}%
-                </span>
-                <span className="text-[10px] text-slate-500">×{p.tx_count}</span>
+                <div className="text-right">
+                  <div className="text-[9px] text-slate-500">交易次數</div>
+                  <div className="text-xs text-slate-400">{p.tx_count}</div>
+                </div>
               </div>
             </div>
           );
