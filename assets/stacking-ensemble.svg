@@ -1,0 +1,304 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 580" font-family="'Inter','SF Pro Display','Noto Sans TC','PingFang TC',system-ui,sans-serif">
+  <defs>
+    <marker id="af" markerWidth="7" markerHeight="5" refX="7" refY="2.5" orient="auto"><path d="M0,0.5 L6,2.5 L0,4.5" fill="#94a3b8"/></marker>
+    <marker id="afR" markerWidth="7" markerHeight="5" refX="7" refY="2.5" orient="auto"><path d="M0,0.5 L6,2.5 L0,4.5" fill="#c0392b"/></marker>
+  </defs>
+
+  <rect width="960" height="580" fill="#fff"/>
+
+  <!-- Title -->
+  <text x="480" y="26" text-anchor="middle" font-size="15" font-weight="700" fill="#1e293b" letter-spacing="0.5">Stacking Ensemble Architecture</text>
+  <text x="480" y="42" text-anchor="middle" font-size="9.5" fill="#94a3b8">Two-layer Stacking  |  5-Fold Stratified CV  |  Diverse Loss Functions</text>
+
+  <!-- ================================================================ -->
+  <!-- INPUT: Feature Vector -->
+  <!-- ================================================================ -->
+  <rect x="340" y="56" width="280" height="36" rx="5" fill="#eef2ff" stroke="#a5b4fc" stroke-width="0.8"/>
+  <text x="480" y="72" text-anchor="middle" font-size="9.5" font-weight="600" fill="#4338ca">Input: 63 features + 3 anomaly scores + 16 GNN embeddings</text>
+  <text x="480" y="84" text-anchor="middle" font-size="7.5" fill="#6366f1">82-dimensional feature vector per user</text>
+
+  <!-- Arrows input to 3 models -->
+  <path d="M 400 92 L 400 108 Q 400 116 390 116 L 175 116 Q 165 116 165 124 L 165 138" fill="none" stroke="#94a3b8" stroke-width="1.2" marker-end="url(#af)"/>
+  <path d="M 480 92 L 480 138" fill="none" stroke="#94a3b8" stroke-width="1.2" marker-end="url(#af)"/>
+  <path d="M 560 92 L 560 108 Q 560 116 570 116 L 795 116 Q 805 116 805 124 L 805 138" fill="none" stroke="#94a3b8" stroke-width="1.2" marker-end="url(#af)"/>
+
+  <!-- 5-Fold CV indicator -->
+  <rect x="30" y="56" width="120" height="36" rx="5" fill="#f0fdf4" stroke="#a9dfbf" stroke-width="0.8"/>
+  <text x="90" y="72" text-anchor="middle" font-size="8.5" font-weight="600" fill="#1e8449">5-Fold Stratified</text>
+  <text x="90" y="84" text-anchor="middle" font-size="7.5" fill="#27ae60">Cross-Validation</text>
+
+  <!-- Fold visualization -->
+  <g transform="translate(42, 100)">
+    <rect x="0" y="0" width="16" height="8" rx="1" fill="#27ae60" opacity="0.8"/>
+    <rect x="18" y="0" width="16" height="8" rx="1" fill="#d5f5e3" stroke="#a9dfbf" stroke-width="0.3"/>
+    <rect x="36" y="0" width="16" height="8" rx="1" fill="#d5f5e3" stroke="#a9dfbf" stroke-width="0.3"/>
+    <rect x="54" y="0" width="16" height="8" rx="1" fill="#d5f5e3" stroke="#a9dfbf" stroke-width="0.3"/>
+    <rect x="72" y="0" width="16" height="8" rx="1" fill="#d5f5e3" stroke="#a9dfbf" stroke-width="0.3"/>
+    <text x="96" y="7" font-size="5.5" fill="#64748b">Fold 1</text>
+
+    <rect x="0" y="12" width="16" height="8" rx="1" fill="#d5f5e3" stroke="#a9dfbf" stroke-width="0.3"/>
+    <rect x="18" y="12" width="16" height="8" rx="1" fill="#27ae60" opacity="0.8"/>
+    <rect x="36" y="12" width="16" height="8" rx="1" fill="#d5f5e3" stroke="#a9dfbf" stroke-width="0.3"/>
+    <rect x="54" y="12" width="16" height="8" rx="1" fill="#d5f5e3" stroke="#a9dfbf" stroke-width="0.3"/>
+    <rect x="72" y="12" width="16" height="8" rx="1" fill="#d5f5e3" stroke="#a9dfbf" stroke-width="0.3"/>
+    <text x="96" y="19" font-size="5.5" fill="#64748b">Fold 2</text>
+
+    <rect x="0" y="24" width="16" height="8" rx="1" fill="#d5f5e3" stroke="#a9dfbf" stroke-width="0.3"/>
+    <rect x="18" y="24" width="16" height="8" rx="1" fill="#d5f5e3" stroke="#a9dfbf" stroke-width="0.3"/>
+    <rect x="36" y="24" width="16" height="8" rx="1" fill="#27ae60" opacity="0.8"/>
+    <rect x="54" y="24" width="16" height="8" rx="1" fill="#d5f5e3" stroke="#a9dfbf" stroke-width="0.3"/>
+    <rect x="72" y="24" width="16" height="8" rx="1" fill="#d5f5e3" stroke="#a9dfbf" stroke-width="0.3"/>
+    <text x="96" y="31" font-size="5.5" fill="#64748b">Fold 3</text>
+
+    <rect x="0" y="36" width="16" height="8" rx="1" fill="#d5f5e3" stroke="#a9dfbf" stroke-width="0.3"/>
+    <rect x="18" y="36" width="16" height="8" rx="1" fill="#d5f5e3" stroke="#a9dfbf" stroke-width="0.3"/>
+    <rect x="36" y="36" width="16" height="8" rx="1" fill="#d5f5e3" stroke="#a9dfbf" stroke-width="0.3"/>
+    <rect x="54" y="36" width="16" height="8" rx="1" fill="#27ae60" opacity="0.8"/>
+    <rect x="72" y="36" width="16" height="8" rx="1" fill="#d5f5e3" stroke="#a9dfbf" stroke-width="0.3"/>
+    <text x="96" y="43" font-size="5.5" fill="#64748b">Fold 4</text>
+
+    <rect x="0" y="48" width="16" height="8" rx="1" fill="#d5f5e3" stroke="#a9dfbf" stroke-width="0.3"/>
+    <rect x="18" y="48" width="16" height="8" rx="1" fill="#d5f5e3" stroke="#a9dfbf" stroke-width="0.3"/>
+    <rect x="36" y="48" width="16" height="8" rx="1" fill="#d5f5e3" stroke="#a9dfbf" stroke-width="0.3"/>
+    <rect x="54" y="48" width="16" height="8" rx="1" fill="#d5f5e3" stroke="#a9dfbf" stroke-width="0.3"/>
+    <rect x="72" y="48" width="16" height="8" rx="1" fill="#27ae60" opacity="0.8"/>
+    <text x="96" y="55" font-size="5.5" fill="#64748b">Fold 5</text>
+
+    <rect x="0" y="63" width="12" height="6" rx="1" fill="#27ae60"/>
+    <text x="16" y="68" font-size="5" fill="#64748b">= validation fold</text>
+  </g>
+
+  <!-- ================================================================ -->
+  <!-- LAYER 0: Three Base Learners -->
+  <!-- ================================================================ -->
+  <text x="480" y="155" text-anchor="middle" font-size="9" font-weight="700" fill="#1e293b" letter-spacing="1">LAYER 0 : BASE LEARNERS</text>
+
+  <!-- XGBoost -->
+  <rect x="30" y="164" width="280" height="170" rx="6" fill="#fff" stroke="#bdc3c7" stroke-width="1"/>
+  <rect x="30" y="164" width="280" height="28" rx="6" fill="#e67e22"/>
+  <rect x="30" y="186" width="280" height="6" fill="#e67e22"/>
+  <text x="170" y="183" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">XGBoost</text>
+
+  <!-- Decision tree illustration -->
+  <g transform="translate(48, 200)">
+    <!-- Tree nodes -->
+    <circle cx="60" cy="10" r="6" fill="#e67e22" opacity="0.7"/>
+    <circle cx="30" cy="40" r="5" fill="#e67e22" opacity="0.5"/>
+    <circle cx="90" cy="40" r="5" fill="#e67e22" opacity="0.5"/>
+    <circle cx="15" cy="68" r="4" fill="#27ae60" opacity="0.6"/>
+    <circle cx="45" cy="68" r="4" fill="#e74c3c" opacity="0.6"/>
+    <circle cx="75" cy="68" r="4" fill="#27ae60" opacity="0.6"/>
+    <circle cx="105" cy="68" r="4" fill="#e74c3c" opacity="0.6"/>
+    <!-- Branches -->
+    <line x1="60" y1="16" x2="30" y2="35" stroke="#1e293b" stroke-width="0.8"/>
+    <line x1="60" y1="16" x2="90" y2="35" stroke="#1e293b" stroke-width="0.8"/>
+    <line x1="30" y1="45" x2="15" y2="64" stroke="#1e293b" stroke-width="0.6"/>
+    <line x1="30" y1="45" x2="45" y2="64" stroke="#1e293b" stroke-width="0.6"/>
+    <line x1="90" y1="45" x2="75" y2="64" stroke="#1e293b" stroke-width="0.6"/>
+    <line x1="90" y1="45" x2="105" y2="64" stroke="#1e293b" stroke-width="0.6"/>
+
+    <!-- Second tree (boosted) -->
+    <text x="128" y="40" font-size="14" fill="#d68910" font-weight="700">+</text>
+    <circle cx="180" cy="10" r="6" fill="#e67e22" opacity="0.5"/>
+    <circle cx="158" cy="40" r="4" fill="#e67e22" opacity="0.35"/>
+    <circle cx="202" cy="40" r="4" fill="#e67e22" opacity="0.35"/>
+    <circle cx="148" cy="62" r="3" fill="#27ae60" opacity="0.4"/>
+    <circle cx="168" cy="62" r="3" fill="#e74c3c" opacity="0.4"/>
+    <circle cx="192" cy="62" r="3" fill="#e74c3c" opacity="0.4"/>
+    <circle cx="212" cy="62" r="3" fill="#27ae60" opacity="0.4"/>
+    <line x1="180" y1="16" x2="158" y2="36" stroke="#1e293b" stroke-width="0.5" opacity="0.5"/>
+    <line x1="180" y1="16" x2="202" y2="36" stroke="#1e293b" stroke-width="0.5" opacity="0.5"/>
+    <line x1="158" y1="44" x2="148" y2="59" stroke="#1e293b" stroke-width="0.4" opacity="0.4"/>
+    <line x1="158" y1="44" x2="168" y2="59" stroke="#1e293b" stroke-width="0.4" opacity="0.4"/>
+    <line x1="202" y1="44" x2="192" y2="59" stroke="#1e293b" stroke-width="0.4" opacity="0.4"/>
+    <line x1="202" y1="44" x2="212" y2="59" stroke="#1e293b" stroke-width="0.4" opacity="0.4"/>
+
+    <text x="225" y="40" font-size="11" fill="#d68910" opacity="0.5">...</text>
+  </g>
+
+  <!-- Params -->
+  <g transform="translate(48, 286)" font-size="8" fill="#1e293b">
+    <text x="0" y="0" font-weight="600" fill="#e67e22">2500 iter</text>
+    <text x="58" y="0">depth=6</text>
+    <text x="110" y="0">lr=0.005</text>
+    <text x="0" y="14" font-weight="600" fill="#c0392b">scale_pos_weight=50</text>
+    <text x="0" y="28" fill="#7f8c8d">eval: AUCPR  |  early_stop: 150</text>
+  </g>
+
+  <!-- LightGBM -->
+  <rect x="340" y="164" width="280" height="170" rx="6" fill="#fff" stroke="#bdc3c7" stroke-width="1"/>
+  <rect x="340" y="164" width="280" height="28" rx="6" fill="#2ecc71"/>
+  <rect x="340" y="186" width="280" height="6" fill="#2ecc71"/>
+  <text x="480" y="183" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">LightGBM</text>
+
+  <!-- Leaf-wise growth illustration -->
+  <g transform="translate(358, 200)">
+    <!-- Tree with leaf-wise split highlighted -->
+    <circle cx="60" cy="10" r="6" fill="#2ecc71" opacity="0.7"/>
+    <circle cx="30" cy="40" r="5" fill="#2ecc71" opacity="0.5"/>
+    <circle cx="90" cy="40" r="5" fill="#2ecc71" opacity="0.5"/>
+    <circle cx="15" cy="68" r="4" fill="#27ae60" opacity="0.6"/>
+    <circle cx="45" cy="68" r="4" fill="#e74c3c" opacity="0.6"/>
+    <!-- Leaf-wise: deeper split on highest loss leaf -->
+    <circle cx="78" cy="68" r="4" fill="#2ecc71" opacity="0.4"/>
+    <circle cx="102" cy="68" r="4" fill="#2ecc71" opacity="0.4"/>
+    <circle cx="68" cy="90" r="3" fill="#e74c3c" opacity="0.5"/>
+    <circle cx="88" cy="90" r="3" fill="#27ae60" opacity="0.5"/>
+    <line x1="60" y1="16" x2="30" y2="35" stroke="#1e293b" stroke-width="0.8"/>
+    <line x1="60" y1="16" x2="90" y2="35" stroke="#1e293b" stroke-width="0.8"/>
+    <line x1="30" y1="45" x2="15" y2="64" stroke="#1e293b" stroke-width="0.6"/>
+    <line x1="30" y1="45" x2="45" y2="64" stroke="#1e293b" stroke-width="0.6"/>
+    <line x1="90" y1="45" x2="78" y2="64" stroke="#1e293b" stroke-width="0.6"/>
+    <line x1="90" y1="45" x2="102" y2="64" stroke="#1e293b" stroke-width="0.6"/>
+    <line x1="78" y1="72" x2="68" y2="87" stroke="#c0392b" stroke-width="0.8" stroke-dasharray="2,1"/>
+    <line x1="78" y1="72" x2="88" y2="87" stroke="#c0392b" stroke-width="0.8" stroke-dasharray="2,1"/>
+    <text x="100" y="92" font-size="5.5" fill="#c0392b" font-weight="600">leaf-wise</text>
+
+    <!-- Focal Loss curve sketch -->
+    <g transform="translate(140, 5)">
+      <text x="50" y="0" text-anchor="middle" font-size="6.5" fill="#1e8449" font-weight="600">Focal Loss</text>
+      <!-- Axes -->
+      <line x1="10" y1="10" x2="10" y2="72" stroke="#1e293b" stroke-width="0.6"/>
+      <line x1="10" y1="72" x2="100" y2="72" stroke="#1e293b" stroke-width="0.6"/>
+      <text x="6" y="14" text-anchor="end" font-size="4.5" fill="#1e293b">Loss</text>
+      <text x="100" y="80" text-anchor="end" font-size="4.5" fill="#1e293b">p_t</text>
+      <!-- CE curve (gray, higher) -->
+      <path d="M 12,14 Q 30,16 50,30 Q 70,48 95,70" fill="none" stroke="#bdc3c7" stroke-width="1"/>
+      <text x="96" y="60" font-size="4.5" fill="#bdc3c7">CE</text>
+      <!-- Focal curve (green, lower for easy samples) -->
+      <path d="M 12,18 Q 25,22 40,45 Q 55,62 95,70" fill="none" stroke="#2ecc71" stroke-width="1.5"/>
+      <text x="50" y="54" font-size="4.5" fill="#2ecc71" font-weight="600">FL</text>
+    </g>
+  </g>
+
+  <!-- Params -->
+  <g transform="translate(358, 286)" font-size="8" fill="#1e293b">
+    <text x="0" y="0" font-weight="600" fill="#2ecc71">2500 iter</text>
+    <text x="18" y="22">depth=4</text>
+    <text x="70" y="22">leaves=63</text>
+    <text x="0" y="38" font-weight="600" fill="#c0392b">Focal Loss  a=0.75  g=2.0</text>
+    <text x="120" y="38" fill="#7f8c8d">lr=0.008  |  no scale_pos_weight</text>
+  </g>
+
+  <!-- CatBoost -->
+  <rect x="650" y="164" width="280" height="170" rx="6" fill="#fff" stroke="#bdc3c7" stroke-width="1"/>
+  <rect x="650" y="164" width="280" height="28" rx="6" fill="#3498db"/>
+  <rect x="650" y="186" width="280" height="6" fill="#3498db"/>
+  <text x="790" y="183" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">CatBoost</text>
+
+  <!-- Ordered boosting illustration -->
+  <g transform="translate(668, 200)">
+    <!-- Ordered data blocks -->
+    <g>
+      <rect x="0" y="5" width="18" height="55" rx="2" fill="#d6eaf8" stroke="#85c1e9" stroke-width="0.5"/>
+      <rect x="0" y="5" width="18" height="10" rx="2" fill="#e74c3c" opacity="0.5"/>
+      <rect x="0" y="17" width="18" height="10" fill="#3498db" opacity="0.15"/>
+      <rect x="0" y="29" width="18" height="10" fill="#3498db" opacity="0.15"/>
+      <rect x="0" y="41" width="18" height="10" fill="#3498db" opacity="0.15"/>
+      <text x="9" y="68" text-anchor="middle" font-size="5" fill="#2471a3">t=1</text>
+    </g>
+    <g>
+      <rect x="24" y="5" width="18" height="55" rx="2" fill="#d6eaf8" stroke="#85c1e9" stroke-width="0.5"/>
+      <rect x="24" y="5" width="18" height="10" rx="2" fill="#e74c3c" opacity="0.5"/>
+      <rect x="24" y="17" width="18" height="10" fill="#e74c3c" opacity="0.5"/>
+      <rect x="24" y="29" width="18" height="10" fill="#3498db" opacity="0.15"/>
+      <rect x="24" y="41" width="18" height="10" fill="#3498db" opacity="0.15"/>
+      <text x="33" y="68" text-anchor="middle" font-size="5" fill="#2471a3">t=2</text>
+    </g>
+    <g>
+      <rect x="48" y="5" width="18" height="55" rx="2" fill="#d6eaf8" stroke="#85c1e9" stroke-width="0.5"/>
+      <rect x="48" y="5" width="18" height="10" rx="2" fill="#e74c3c" opacity="0.5"/>
+      <rect x="48" y="17" width="18" height="10" fill="#e74c3c" opacity="0.5"/>
+      <rect x="48" y="29" width="18" height="10" fill="#e74c3c" opacity="0.5"/>
+      <rect x="48" y="41" width="18" height="10" fill="#3498db" opacity="0.15"/>
+      <text x="57" y="68" text-anchor="middle" font-size="5" fill="#2471a3">t=3</text>
+    </g>
+    <text x="76" y="38" font-size="10" fill="#2471a3">...</text>
+    <text x="35" y="80" text-anchor="middle" font-size="6" fill="#2471a3" font-weight="600">Ordered Boosting</text>
+    <text x="35" y="110" text-anchor="middle" font-size="5.5" fill="#7f8c8d">Prevents target leakage</text>
+
+    <!-- Symmetric tree -->
+    <g transform="translate(120, 0)">
+      <text x="55" y="0" text-anchor="middle" font-size="6" fill="#2471a3" font-weight="600">Symmetric Tree</text>
+      <circle cx="55" cy="16" r="5" fill="#3498db" opacity="0.6"/>
+      <circle cx="35" cy="40" r="4" fill="#3498db" opacity="0.45"/>
+      <circle cx="75" cy="40" r="4" fill="#3498db" opacity="0.45"/>
+      <circle cx="25" cy="62" r="3.5" fill="#27ae60" opacity="0.5"/>
+      <circle cx="45" cy="62" r="3.5" fill="#e74c3c" opacity="0.5"/>
+      <circle cx="65" cy="62" r="3.5" fill="#e74c3c" opacity="0.5"/>
+      <circle cx="85" cy="62" r="3.5" fill="#27ae60" opacity="0.5"/>
+      <line x1="55" y1="21" x2="35" y2="36" stroke="#1e293b" stroke-width="0.6"/>
+      <line x1="55" y1="21" x2="75" y2="36" stroke="#1e293b" stroke-width="0.6"/>
+      <line x1="35" y1="44" x2="25" y2="58" stroke="#1e293b" stroke-width="0.5"/>
+      <line x1="35" y1="44" x2="45" y2="58" stroke="#1e293b" stroke-width="0.5"/>
+      <line x1="75" y1="44" x2="65" y2="58" stroke="#1e293b" stroke-width="0.5"/>
+      <line x1="75" y1="44" x2="85" y2="58" stroke="#1e293b" stroke-width="0.5"/>
+      <!-- Symmetric indicators -->
+      <path d="M 25,68 Q 55,78 85,68" fill="none" stroke="#2471a3" stroke-width="0.5" stroke-dasharray="2,1"/>
+      <text x="55" y="85" text-anchor="middle" font-size="5" fill="#2471a3">same split per level</text>
+    </g>
+  </g>
+
+  <!-- Params -->
+  <g transform="translate(668, 286)" font-size="8" fill="#1e293b">
+    <text x="-5" y="10" font-weight="600" fill="#3498db">2500 iter</text>
+    <text x="35" y="10">depth=7</text>
+    <text x="70" y="10">lr=0.01</text>
+    <text x="0" y="38" font-weight="600" fill="#c0392b">scale_pos_weight=50</text>
+    <text x="100" y="10">bagging_temp=0.8</text>
+    <text x="120" y="38" fill="#7f8c8d">eval: PRAUC  |  early_stop: 150</text>
+  </g>
+
+  <!-- ================================================================ -->
+  <!-- OOF Probability outputs -->
+  <!-- ================================================================ -->
+  <!-- Output labels from each model -->
+  <text x="170" y="348" text-anchor="middle" font-size="8" fill="#e67e22" font-weight="600">P(XGB)</text>
+  <text x="480" y="348" text-anchor="middle" font-size="8" fill="#2ecc71" font-weight="600">P(LGB)</text>
+  <text x="790" y="348" text-anchor="middle" font-size="8" fill="#3498db" font-weight="600">P(CAT)</text>
+
+  <!-- Arrows down to OOF merge -->
+  <path d="M 170 354 L 170 372 Q 170 380 180 380 L 400 380 Q 408 380 408 388 L 408 400" fill="none" stroke="#e67e22" stroke-width="1.2" marker-end="url(#af)"/>
+  <path d="M 480 354 L 480 400" fill="none" stroke="#2ecc71" stroke-width="1.2" marker-end="url(#af)"/>
+  <path d="M 790 354 L 790 372 Q 790 380 780 380 L 560 380 Q 552 380 552 388 L 552 400" fill="none" stroke="#3498db" stroke-width="1.2" marker-end="url(#af)"/>
+
+  <!-- ================================================================ -->
+  <!-- Meta-feature construction -->
+  <!-- ================================================================ -->
+  <rect x="330" y="404" width="300" height="44" rx="5" fill="#fef9e7" stroke="#f9e79f" stroke-width="0.8"/>
+  <text x="480" y="420" text-anchor="middle" font-size="8.5" font-weight="600" fill="#7d6608">Meta-features (7-dim)</text>
+  <text x="480" y="436" text-anchor="middle" font-size="7.5" fill="#b7950b">[ P_xgb, P_lgb, P_cat, max, min, std, mean ]</text>
+
+  <!-- Arrow to Meta-Learner -->
+  <path d="M 480 448 L 480 468" fill="none" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#af)"/>
+
+  <!-- ================================================================ -->
+  <!-- LAYER 1: Meta-Learner -->
+  <!-- ================================================================ -->
+  <text x="480" y="480" text-anchor="middle" font-size="9" font-weight="700" fill="#1e293b" letter-spacing="1">LAYER 1 : META-LEARNER</text>
+
+  <rect x="330" y="488" width="300" height="36" rx="5" fill="#c0392b"/>
+  <text x="480" y="507" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">Logistic Regression</text>
+  <text x="480" y="519" text-anchor="middle" font-size="7.5" fill="#f5b7b1">class_weight=balanced  |  StandardScaler</text>
+
+  <!-- Arrow to output -->
+  <path d="M 480 524 L 480 544" fill="none" stroke="#c0392b" stroke-width="1.5" marker-end="url(#afR)"/>
+
+  <!-- ================================================================ -->
+  <!-- Threshold + Output -->
+  <!-- ================================================================ -->
+  <rect x="350" y="548" width="260" height="24" rx="4" fill="#fdf2f2" stroke="#f5b7b1" stroke-width="0.6"/>
+  <text x="480" y="564" text-anchor="middle" font-size="8.5" fill="#922b21" font-weight="600">PR-Curve F-beta threshold  |  OOF: 0.857  |  Test: 0.868</text>
+
+  <!-- Diversity callout -->
+  <rect x="700" y="404" width="230" height="60" rx="5" fill="#f8fafc" stroke="#e2e8f0" stroke-width="0.8"/>
+  <text x="815" y="420" text-anchor="middle" font-size="8" font-weight="700" fill="#1e293b">Loss Function Diversity</text>
+  <g transform="translate(714, 428)" font-size="7.5">
+    <circle cx="4" cy="2" r="3" fill="#e67e22"/>
+    <text x="12" y="5" fill="#1e293b">XGB: scale_pos_weight</text>
+    <circle cx="4" cy="16" r="3" fill="#2ecc71"/>
+    <text x="12" y="18" fill="#1e293b">LGB: Focal Loss (non-linear)</text>
+    <circle cx="4" cy="30" r="3" fill="#3498db"/>
+    <text x="12" y="33" fill="#1e293b">CAT: Ordered + scale_pos_weight</text>
+  </g>
+</svg>

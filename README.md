@@ -46,108 +46,17 @@
 
 ## 系統架構
 
-```mermaid
-flowchart TB
-    subgraph DATA["📦 資料層"]
-        D1[user_info<br/>63,770 筆]
-        D2[twd_transfer<br/>195,601 筆]
-        D3[crypto_transfer<br/>239,958 筆]
-        D4[usdt_twd_trading<br/>217,634 筆]
-        D5[usdt_swap<br/>53,841 筆]
-    end
-
-    subgraph FE["⚙️ 特徵工程 (81 → 63 維)"]
-        F1[用戶特徵<br/>KYC 速度 / 帳號年齡 / 職業風險]
-        F2[法幣行為<br/>入金統計 / 提領比率 / 淨流入]
-        F3[虛幣行為<br/>幣種多樣性 / 協定數 / 錢包數]
-        F4[交易行為<br/>買單比率 / 市價單比率 / 一鍵買賣]
-        F5[IP & 時序<br/>深夜操作 / IP 共用 / 資金停留]
-        F6[圖拓撲<br/>PageRank / 連通分量]
-        F7[AML 紅旗<br/>法幣入金幣出比 / 同天入出金 / Smurfing]
-        F8[時間模式<br/>交易間隔 / 週末比率 / 活躍天數]
-    end
-
-    subgraph FS["🔍 特徵篩選"]
-        FS1[零方差移除: 1 特徵]
-        FS2[高相關移除: 13 特徵<br/>閾值 ≥ 0.95]
-        FS3[零重要性移除: 4 特徵]
-    end
-
-    subgraph AD["🔬 無監督異常偵測"]
-        AD1[Isolation Forest]
-        AD2[HBOS]
-        AD3[LOF]
-    end
-
-    subgraph GNN["🕸️ 圖神經網路"]
-        G1[異質圖建構<br/>User ↔ Wallet]
-        G2[HeteroSAGE + GAT<br/>80 Epochs]
-        G3[64-dim Embedding<br/>→ PCA 16-dim]
-    end
-
-    subgraph ENS["🏗️ Stacking Ensemble"]
-        direction TB
-        E1[XGBoost<br/>scale_pos_weight]
-        E2[LightGBM<br/>Focal Loss α=0.75 γ=2.0]
-        E3[CatBoost<br/>Ordered Boosting]
-        E4[Meta-Learner<br/>Logistic Regression]
-    end
-
-    subgraph POST["📊 後處理 & 輸出"]
-        P1[SHAP 可解釋性<br/>Global + Local + SSR]
-        P2[公平性審計<br/>性別 / 年齡 / 職業 / 收入]
-        P3[風險報告<br/>自然語言 + 反事實]
-        P4[React Dashboard<br/>2D/3D 圖譜]
-    end
-
-    DATA --> FE
-    FE --> FS
-    FS --> AD
-    D3 --> GNN
-    AD -->|anomaly scores| ENS
-    GNN -->|embeddings| ENS
-    FS -->|63 features| ENS
-    E1 --> E4
-    E2 --> E4
-    E3 --> E4
-    ENS --> POST
-```
+<p align="center">
+  <img src="assets/architecture.svg" alt="系統架構圖" width="100%"/>
+</p>
 
 ---
 
 ## 專案結構
 
-```mermaid
-graph LR
-    subgraph ROOT["Bio_AWS_Workshop/"]
-        direction TB
-        R1["RawData/ — 原始資料 (7 CSV)"]
-        R2["adjust_data/ — 前處理後 train/test"]
-
-        subgraph WM["Wei_model/ — 核心 ML Pipeline"]
-            direction TB
-            M1["model/main.py — 主訓練流程入口"]
-            M2["model/Feature_rngineering.py — 特徵工程 (11 類)"]
-            M3["model/feature_selection.py — 相關性 & 重要性篩選"]
-            M4["model/anomaly_detection.py — IF / HBOS / LOF"]
-            M5["model/Gnn_model.py — HeteroSAGE + GAT"]
-            M6["model/ensemble.py — Stacking (XGB+LGB+CAT)"]
-            M7["model/shap_explainer.py — SHAP + SSR + 反事實"]
-            M8["model/fairness_audit.py — 四維度公平性檢測"]
-            M9["model/pseudo_labeling.py — 半監督擴增"]
-            M10["output/ — 模型輸出與報告"]
-        end
-
-        subgraph FD["frontend/ — React 互動式儀表板"]
-            direction TB
-            FD1["src/components/graph/ — 2D/3D 交易網路圖譜"]
-            FD2["src/components/stats/ — 統計面板 + 風險分布"]
-            FD3["src/components/fpfn/ — FP/FN 分析 + SHAP Waterfall"]
-            FD4["src/components/predict/ — 預測結果檢視"]
-            FD5["output/ — 前端使用的 CSV 資料"]
-        end
-    end
-```
+<p align="center">
+  <img src="assets/project-structure.svg" alt="專案結構圖" width="100%"/>
+</p>
 
 ```
 Bio_AWS_Workshop/
@@ -197,24 +106,6 @@ Bio_AWS_Workshop/
 
 ---
 
-## 資料集概覽
-
-本專案使用 BitoGroup 提供的去識別化交易所資料，共 7 張表、**77 萬+筆交易紀錄**：
-
-| 資料表 | 筆數 | 說明 |
-|--------|------|------|
-| `user_info` | 63,770 | 用戶基本資料：KYC 驗證等級、註冊時間、生日、職業、收入來源 |
-| `twd_transfer` | 195,601 | 法幣（台幣）入金/提領交易紀錄 |
-| `crypto_transfer` | 239,958 | 加密貨幣加值/提領/內轉，含鏈上錢包地址與協定資訊 |
-| `usdt_twd_trading` | 217,634 | 掛單簿 USDT/TWD 成交訂單（含市價/限價單） |
-| `usdt_swap` | 53,841 | 一鍵買賣 USDT 成交訂單 |
-| `train_label` | 51,017 | 訓練標籤（0: 正常用戶 / 1: 黑名單） |
-| `predict_label` | 12,753 | 預測目標（無標籤，需繳交預測結果） |
-
-**類別不平衡**：黑名單用戶僅佔約 3.3%（328 / 10,204），屬於高度不平衡分類問題。
-
----
-
 ## 技術棧
 
 | 層級 | 技術 |
@@ -232,35 +123,6 @@ Bio_AWS_Workshop/
 | **樣式** | Tailwind CSS 3 |
 
 ---
-
-## 完整 Pipeline
-
-```mermaid
-flowchart TD
-    S1["[Step 1] 資料載入與驗證<br/>5 張交易表 + 用戶資訊"] --> S2
-    S2["[Step 2] 特徵工程<br/>11 大類 → 81 維特徵"] --> S2_5
-    S2_5["[Step 2.5] 特徵篩選<br/>81 → 63 維 + 移除受保護屬性"] --> S3
-    S3["[Step 3] 訓練/測試切分<br/>80:20 Stratified Split"] --> S3_5
-    S3_5["[Step 3.5] 無監督異常偵測<br/>IF / HBOS / LOF → 3 維分數"] --> S4
-    S4["[Step 4] 圖神經網路<br/>HeteroSAGE + GAT → 16 維嵌入"] --> S5
-    S5["[Step 5] Stacking Ensemble<br/>XGB + LGB(Focal) + CAT → LR Meta"] --> S6
-    S6["[Step 6] 測試集評估<br/>Metrics + 閾值掃描"] --> S7
-    S7["[Step 7] SHAP 全域分析<br/>80 特徵重要性排名"] --> S8
-    S8["[Step 8] 個案報告<br/>Waterfall + 反事實 + 自然語言"] --> S8_5
-    S8_5["[Step 8.5] SSR 穩定性驗證<br/>擾動下 SHAP 一致性檢驗"] --> S9
-    S9["[Step 9] 全量風險評分<br/>10,204 用戶風險等級"] --> S10
-    S10["[Step 10] 預測集推論<br/>12,753 筆 → submission.csv"] --> S10_5
-    S10_5["[Step 10.5] 預測集可解釋性<br/>Top 10 高風險用戶 Waterfall"] --> S11
-    S11["[Step 11] 公平性審計<br/>性別 / 年齡 / 職業 / 收入"] --> S12
-    S12["[Step 12] 輸出總結報告"]
-
-    style S2 fill:#e1f5fe
-    style S4 fill:#f3e5f5
-    style S5 fill:#fff3e0
-    style S7 fill:#e8f5e9
-    style S11 fill:#fce4ec
-```
-
 ### Step 1：資料載入與驗證
 
 從 5 張交易表 + 用戶資訊表載入資料，執行嚴格的欄位型態轉換（datetime / int / float / str），缺失值統計報告，並驗證黑名單比例一致性。
@@ -302,55 +164,17 @@ flowchart TD
 
 利用 `crypto_transfer` 表中的鏈上錢包地址，建構**異質圖 (Heterogeneous Graph)**，捕捉傳統表格特徵無法表達的**風險傳播關係**。
 
-```mermaid
-graph LR
-    U1((User A)) -->|sends| W1[Wallet X]
-    W1 -->|receives| U2((User B))
-    U1 -->|internal<br/>transfer| U2
-    U2 -->|sends| W2[Wallet Y]
-    W2 -->|receives| U3((User C))
-
-    style U1 fill:#ff6b6b,color:#fff
-    style U2 fill:#ffa726,color:#fff
-    style U3 fill:#66bb6a,color:#fff
-    style W1 fill:#42a5f5,color:#fff
-    style W2 fill:#42a5f5,color:#fff
-```
-
-- **節點類型**：`user`（用戶 ~10,204）+ `wallet`（鏈上錢包 ~16,000）
-- **邊類型**：
-  - `user → wallet`：虛幣提領（sends）
-  - `wallet → user`：虛幣加值（receives）
-  - `user → user`：站內轉帳（internal）
-- **模型**：HeteroSAGE（鄰域聚合）+ GATConv（注意力機制）+ BatchNorm + MLP Head
-- **訓練**：80 epochs，Binary Cross-Entropy with `pos_weight`
-- **輸出**：64-dim 嵌入 → PCA 降至 16 維（保留 92% 方差），注入 Ensemble 作為特徵
+<p align="center">
+  <img src="assets/gnn-architecture.svg" alt="GNN 架構圖" width="100%"/>
+</p>
 
 ### Step 5：Stacking Ensemble 集成學習
 
 採用兩層 Stacking 架構，三個 Base Learner **各自使用不同損失函數**以最大化模型多樣性：
 
-```mermaid
-flowchart TB
-    subgraph L0["Layer 0 — Base Learners (5-Fold Stratified CV)"]
-        XGB["XGBoost<br/>2500 iter, depth=6<br/>scale_pos_weight=50<br/>AUCPR eval"]
-        LGB["LightGBM<br/>2500 iter, depth=4<br/>Focal Loss (α=0.75, γ=2.0)<br/>leaves=63"]
-        CAT["CatBoost<br/>2500 iter, depth=7<br/>Ordered Boosting<br/>bagging_temp=0.8"]
-    end
-
-    subgraph L1["Layer 1 — Meta-Learner"]
-        META["Logistic Regression<br/>Input: [XGB_prob, LGB_prob, CAT_prob,<br/>max, min, std, mean]<br/>class_weight=balanced"]
-    end
-
-    subgraph TH["Threshold Optimization"]
-        THR["PR-Curve F-beta 掃描<br/>OOF threshold: 0.857<br/>Test threshold: 0.868"]
-    end
-
-    XGB --> META
-    LGB --> META
-    CAT --> META
-    META --> THR
-```
+<p align="center">
+  <img src="assets/stacking-ensemble.svg" alt="Stacking Ensemble 架構圖" width="100%"/>
+</p>
 
 **不平衡處理策略**：
 - **Focal Loss**（LightGBM）：α=0.75, γ=2.0，自動增加邊界樣本的損失權重

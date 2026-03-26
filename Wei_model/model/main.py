@@ -557,6 +557,16 @@ def main(
     with open(os.path.join(output_dir, "metrics.json"), "w", encoding="utf-8") as f:
         json.dump({k: float(v) for k, v in metrics.items()}, f, indent=2, ensure_ascii=False)
 
+    # 保存模型
+    import joblib
+    model_path = os.path.join(output_dir, "ensemble_model.joblib")
+    joblib.dump({
+        "ensemble": ensemble,
+        "optimal_threshold": optimal_t,
+        "feature_names": feature_names,
+    }, model_path)
+    print(f"\n  模型已儲存：{model_path}")
+
     # 輸出測試集每筆的機率值（模型沒看過的資料）
     test_result_df = pd.DataFrame({
         "user_id":    feat_df.index[idx_te],
@@ -718,6 +728,58 @@ def main(
     for level, cnt in dist.items():
         bar = "█" * min(int(cnt / len(result_df) * 50), 45)
         print(f"  {level:<6}  {cnt:>6}  {bar}")
+
+    # ── Step 9.5：GNN node/edge list 輸出 ─────
+    if not skip_gnn and 'graph' in dir():
+        print("\n  產出 GNN node/edge list ...")
+        idx_to_user = {v: k for k, v in graph.user_to_idx.items()}
+        idx_to_wallet = {v: k for k, v in graph.wallet_to_idx.items()}
+
+        # node list
+        node_rows = []
+        for idx, uid in idx_to_user.items():
+            uid_pos = np.where(feat_df.index.values == uid)[0]
+            rs = float(all_proba[uid_pos[0]]) if len(uid_pos) > 0 else None
+            lb = float(y[uid_pos[0]]) if len(uid_pos) > 0 else None
+            node_rows.append({"node_id": f"user_{uid}", "node_type": "user",
+                              "risk_score": rs, "label": lb})
+        for idx, wid in idx_to_wallet.items():
+            node_rows.append({"node_id": f"wallet_{wid}", "node_type": "wallet",
+                              "risk_score": None, "label": None})
+        pd.DataFrame(node_rows).to_csv(
+            os.path.join(output_dir, "gnn_node_list.csv"), index=False)
+
+        # edge list
+        edge_type_map = {
+            ("user", "sends", "wallet"): "user_sends_wallet",
+            ("wallet", "funds", "user"): "wallet_funds_user",
+            ("user", "transfers", "user"): "user_transfers_user",
+        }
+        edge_rows = []
+        for et in graph.edge_types:
+            if hasattr(graph[et], "edge_index"):
+                ei = graph[et].edge_index.numpy()
+                et_name = edge_type_map.get(et, "_".join(et))
+                for s, t in zip(ei[0], ei[1]):
+                    if et[0] == "user":
+                        src_id = f"user_{idx_to_user[s]}"
+                        src_raw = idx_to_user[s]
+                    else:
+                        src_id = f"wallet_{idx_to_wallet[s]}"
+                        src_raw = idx_to_wallet[s]
+                    if et[2] == "user":
+                        dst_id = f"user_{idx_to_user[t]}"
+                        dst_raw = idx_to_user[t]
+                    else:
+                        dst_id = f"wallet_{idx_to_wallet[t]}"
+                        dst_raw = idx_to_wallet[t]
+                    edge_rows.append({"source": src_id, "target": dst_id,
+                                      "source_raw": src_raw, "target_raw": dst_raw,
+                                      "edge_type": et_name})
+        pd.DataFrame(edge_rows).to_csv(
+            os.path.join(output_dir, "gnn_edge_list.csv"), index=False)
+        print(f"    gnn_node_list.csv: {len(node_rows):,} 筆")
+        print(f"    gnn_edge_list.csv: {len(edge_rows):,} 筆")
 
     # ── Step 10：Predict 資料預測 → 提交 CSV ─────
     print("\n" + "="*55)
@@ -962,15 +1024,60 @@ def main(
     shap_all_df.to_csv(os.path.join(output_dir, "shap_values_all.csv"), index=False)
     print(f"  shap_values_all.csv: {len(shap_all_df):,} 筆")
 
+    # 12.1.5：shap_top20 摘要 CSV（全量用戶 + 黑名單用戶）
+    from shap_explainer import FEATURE_NAME_MAP as _FMAP
+    train_shap = all_explainer.shap_values[:len(y)]
+
+    def _build_shap_top20(shap_matrix, feat_names, save_path):
+        """產出 Top20 特徵 SHAP 摘要 CSV"""
+        abs_shap = np.abs(shap_matrix)
+        mean_abs = abs_shap.mean(axis=0)
+        total = mean_abs.sum()
+        # 每筆取 top10 index，統計每個特徵出現在 top10 的頻率
+        freq = np.zeros(len(feat_names), dtype=int)
+        for i in range(shap_matrix.shape[0]):
+            top10_idx = np.argsort(abs_shap[i])[-10:]
+            freq[top10_idx] += 1
+        order = np.argsort(mean_abs)[::-1][:20]
+        rows = []
+        cum = 0.0
+        for rank, idx in enumerate(order, 1):
+            pct = mean_abs[idx] / total * 100
+            cum += pct
+            rows.append({
+                "排名": rank,
+                "feature": feat_names[idx],
+                "中文名稱": _FMAP.get(feat_names[idx], feat_names[idx]),
+                "SHAP值": round(mean_abs[idx], 6),
+                "佔比": f"{pct:.2f}%",
+                "頻率次數": int(freq[idx]),
+                "累積%": f"{cum:.2f}%",
+            })
+        pd.DataFrame(rows).to_csv(save_path, index=False)
+        return len(rows)
+
+    n1 = _build_shap_top20(train_shap, feature_names,
+                           os.path.join(output_dir, "shap_top20_all_users.csv"))
+    n2 = _build_shap_top20(train_shap[y == 1], feature_names,
+                           os.path.join(output_dir, "shap_top20_blacklist.csv"))
+    print(f"  shap_top20_all_users.csv: Top {n1}")
+    print(f"  shap_top20_blacklist.csv: Top {n2}（黑名單 {int((y == 1).sum())} 人）")
+
     # 12.2：blacklist_analysis.xlsx
     print(f"\n  產出 blacklist_analysis.xlsx ...")
 
-    # 驗證集分群（有 true_label）
+    # 全量訓練集分群
+    all_train_user_ids = feat_df.index.values
+    all_train_pred_lbl = (all_proba >= optimal_t).astype(int)
+    all_train_shap_vals = all_explainer.shap_values[:len(y)]
+
+    black_mask_all = (y == 1)
+
+    # 驗證集分群（FP/FN 只在測試集有意義）
     te_user_ids  = feat_df.index[idx_te]
     te_pred_lbl  = (y_proba >= optimal_t).astype(int)
     te_shap_vals = all_explainer.shap_values[:len(y)][idx_te]
 
-    black_mask_te = (y_te == 1)
     fp_mask_te    = (y_te == 0) & (te_pred_lbl == 1)
     fn_mask_te    = (y_te == 1) & (te_pred_lbl == 0)
 
@@ -989,8 +1096,8 @@ def main(
     te_scores = y_proba
 
     sheet_black = build_blacklist_sheet(
-        te_user_ids[black_mask_te], te_scores[black_mask_te],
-        te_shap_vals[black_mask_te], feature_names)
+        all_train_user_ids[black_mask_all], all_proba[black_mask_all],
+        all_train_shap_vals[black_mask_all], feature_names)
     sheet_fp = build_blacklist_sheet(
         te_user_ids[fp_mask_te], te_scores[fp_mask_te],
         te_shap_vals[fp_mask_te], feature_names)
@@ -1028,7 +1135,7 @@ def main(
     print(f"\n  產出 shap_top10_by_group.xlsx ...")
 
     sheet_black_shap = build_top10_shap_sheet(
-        te_user_ids[black_mask_te], te_shap_vals[black_mask_te], feature_names)
+        all_train_user_ids[black_mask_all], all_train_shap_vals[black_mask_all], feature_names)
     sheet_fp_shap = build_top10_shap_sheet(
         te_user_ids[fp_mask_te], te_shap_vals[fp_mask_te], feature_names)
     sheet_fn_shap = build_top10_shap_sheet(

@@ -1,0 +1,236 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 780" font-family="'Inter','SF Pro Display','Noto Sans TC','PingFang TC',system-ui,sans-serif">
+  <defs>
+    <marker id="a" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0.5 L7,3 L0,5.5" fill="#5b7a9d"/></marker>
+    <marker id="aB" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0.5 L7,3 L0,5.5" fill="#2980b9"/></marker>
+    <marker id="aR" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0.5 L7,3 L0,5.5" fill="#c0392b"/></marker>
+    <marker id="aG" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0.5 L7,3 L0,5.5" fill="#27ae60"/></marker>
+    <marker id="aO" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0.5 L7,3 L0,5.5" fill="#d68910"/></marker>
+  </defs>
+
+  <rect width="960" height="780" fill="#f5f5f5"/>
+
+  <!-- Title -->
+  <text x="480" y="32" text-anchor="middle" font-size="18" font-weight="700" fill="#2c3e50" letter-spacing="0.5">Project Structure &amp; Data Flow</text>
+  <text x="480" y="50" text-anchor="middle" font-size="10" fill="#7f8c8d">Bio_AWS_Workshop  |  Module Dependencies &amp; Pipeline Data Flow</text>
+
+  <!-- ================================================================ -->
+  <!-- DATA SOURCES (top) -->
+  <!-- ================================================================ -->
+  <rect x="240" y="70" width="480" height="56" rx="4" fill="#fff" stroke="#bdc3c7" stroke-width="1"/>
+  <rect x="240" y="70" width="56" height="56" rx="4" fill="#2980b9"/>
+  <text x="268" y="96" text-anchor="middle" font-size="9" font-weight="700" fill="#fff">Data</text>
+  <text x="268" y="108" text-anchor="middle" font-size="8" fill="#aed6f1">Sources</text>
+
+  <g font-size="9" text-anchor="middle">
+    <rect x="306" y="80" width="78" height="34" rx="3" fill="#d6eaf8" stroke="#85c1e9" stroke-width="0.6"/>
+    <text x="345" y="95" fill="#1a5276" font-weight="600">RawData/</text>
+    <text x="345" y="107" fill="#5b7a9d" font-size="7.5">7 CSV tables</text>
+
+    <rect x="394" y="80" width="88" height="34" rx="3" fill="#d6eaf8" stroke="#85c1e9" stroke-width="0.6"/>
+    <text x="438" y="95" fill="#1a5276" font-weight="600">adjust_data/</text>
+    <text x="438" y="107" fill="#5b7a9d" font-size="7.5">train / test split</text>
+
+    <rect x="492" y="80" width="88" height="34" rx="3" fill="#d6eaf8" stroke="#85c1e9" stroke-width="0.6"/>
+    <text x="536" y="95" fill="#1a5276" font-weight="600">train_label</text>
+    <text x="536" y="107" fill="#5b7a9d" font-size="7.5">51,017 labels</text>
+
+    <rect x="590" y="80" width="88" height="34" rx="3" fill="#d6eaf8" stroke="#85c1e9" stroke-width="0.6"/>
+    <text x="634" y="95" fill="#1a5276" font-weight="600">predict_label</text>
+    <text x="634" y="107" fill="#5b7a9d" font-size="7.5">12,753 unlabeled</text>
+  </g>
+
+  <!-- Arrow: Data → ML Pipeline -->
+  <path d="M 480 126 L 480 152" fill="none" stroke="#2980b9" stroke-width="1.5" marker-end="url(#aB)"/>
+  <text x="498" y="144" font-size="8" fill="#2980b9" font-weight="500">770K+ records</text>
+
+  <!-- ================================================================ -->
+  <!-- ML PIPELINE (Wei_model/) — center block -->
+  <!-- ================================================================ -->
+  <rect x="30" y="158" width="700" height="530" rx="6" fill="#fff" stroke="#e6b0aa" stroke-width="1.2"/>
+  <rect x="30" y="158" width="700" height="36" rx="6" fill="#c0392b"/>
+  <rect x="30" y="180" width="700" height="14" fill="#c0392b"/>
+  <text x="380" y="182" text-anchor="middle" font-size="13" font-weight="700" fill="#fff" letter-spacing="0.5">Wei_model/  —  Core ML Pipeline</text>
+
+  <!-- main.py controller -->
+  <rect x="220" y="206" width="320" height="36" rx="4" fill="#fdedec" stroke="#c0392b" stroke-width="0.8"/>
+  <text x="380" y="222" text-anchor="middle" font-size="11" font-weight="700" fill="#922b21">main.py</text>
+  <text x="380" y="236" text-anchor="middle" font-size="8" fill="#b03a2e">Pipeline controller  |  12-step automated workflow</text>
+
+  <!-- Step connectors from main.py -->
+  <!-- Left branch -->
+  <path d="M 300 242 L 300 262 Q 300 270 290 270 L 150 270 Q 140 270 140 278 L 140 288" fill="none" stroke="#922b21" stroke-width="1" marker-end="url(#aR)"/>
+  <!-- Center-left -->
+  <path d="M 340 242 L 340 262 Q 340 270 330 270 L 308 270 Q 300 270 300 278 L 300 288" fill="none" stroke="#922b21" stroke-width="1" marker-end="url(#aR)"/>
+  <!-- Center -->
+  <line x1="380" y1="242" x2="380" y2="288" stroke="#922b21" stroke-width="1" marker-end="url(#aR)"/>
+  <!-- Center-right -->
+  <path d="M 420 242 L 420 262 Q 420 270 430 270 L 452 270 Q 460 270 460 278 L 460 288" fill="none" stroke="#922b21" stroke-width="1" marker-end="url(#aR)"/>
+  <!-- Right branch -->
+  <path d="M 460 242 L 460 262 Q 460 270 470 270 L 600 270 Q 610 270 610 278 L 610 288" fill="none" stroke="#922b21" stroke-width="1" marker-end="url(#aR)"/>
+
+  <!-- Step 1-2: Feature Engineering -->
+  <rect x="54" y="294" width="170" height="52" rx="4" fill="#fdedec" stroke="#f5b7b1" stroke-width="0.7"/>
+  <rect x="54" y="294" width="170" height="18" rx="4" fill="#c0392b"/>
+  <text x="60" y="306" font-size="8" fill="#fff" font-weight="600">STEP 1-2</text>
+  <text x="139" y="326" text-anchor="middle" font-size="9.5" font-weight="600" fill="#922b21">Feature_rngineering.py</text>
+  <text x="139" y="340" text-anchor="middle" font-size="7.5" fill="#b03a2e">11 categories → 81 dims</text>
+
+  <!-- Step 2.5: Feature Selection -->
+  <rect x="234" y="294" width="130" height="52" rx="4" fill="#fdedec" stroke="#f5b7b1" stroke-width="0.7"/>
+  <rect x="234" y="294" width="130" height="18" rx="4" fill="#c0392b"/>
+  <text x="240" y="306" font-size="8" fill="#fff" font-weight="600">STEP 2.5</text>
+  <text x="299" y="326" text-anchor="middle" font-size="9.5" font-weight="600" fill="#922b21">feature_selection.py</text>
+  <text x="299" y="340" text-anchor="middle" font-size="7.5" fill="#b03a2e">81 → 63 dims</text>
+
+  <!-- Step 3.5: Anomaly Detection -->
+  <rect x="374" y="294" width="114" height="52" rx="4" fill="#eafaf1" stroke="#a9dfbf" stroke-width="0.7"/>
+  <rect x="374" y="294" width="114" height="18" rx="4" fill="#27ae60"/>
+  <text x="380" y="306" font-size="8" fill="#fff" font-weight="600">STEP 3.5</text>
+  <text x="431" y="326" text-anchor="middle" font-size="9" font-weight="600" fill="#1e8449">anomaly_</text>
+  <text x="431" y="338" text-anchor="middle" font-size="9" font-weight="600" fill="#1e8449">detection.py</text>
+
+  <!-- Step 4: GNN -->
+  <rect x="536" y="294" width="170" height="52" rx="4" fill="#f5eef8" stroke="#d7bde2" stroke-width="0.7"/>
+  <rect x="536" y="294" width="170" height="18" rx="4" fill="#8e44ad"/>
+  <text x="542" y="306" font-size="8" fill="#fff" font-weight="600">STEP 4</text>
+  <text x="621" y="326" text-anchor="middle" font-size="9.5" font-weight="600" fill="#6c3483">Gnn_model.py</text>
+  <text x="621" y="340" text-anchor="middle" font-size="7.5" fill="#7d3c98">HeteroSAGE + GAT → 16d embed</text>
+
+  <!-- Arrows: Step 1-2 → Selection → Anomaly | GNN feeds into Ensemble -->
+  <path d="M 139 346 L 139 370 Q 139 378 149 378 L 230 378 Q 238 378 238 386 L 238 396" fill="none" stroke="#c0392b" stroke-width="1" marker-end="url(#aR)"/>
+  <text x="168" y="375" font-size="7" fill="#b03a2e">81 features</text>
+
+  <path d="M 299 346 L 299 370 Q 299 378 309 378 L 342 378 Q 350 378 350 386 L 350 396" fill="none" stroke="#c0392b" stroke-width="1" marker-end="url(#aR)"/>
+  <text x="310" y="375" font-size="7" fill="#b03a2e">63 features</text>
+
+  <path d="M 431 346 L 431 370 Q 431 378 441 378 L 458 378 Q 466 378 466 386 L 466 396" fill="none" stroke="#27ae60" stroke-width="1" marker-end="url(#aG)"/>
+  <text x="440" y="375" font-size="7" fill="#1e8449">3 scores</text>
+
+  <path d="M 621 346 L 621 370 Q 621 378 611 378 L 580 378 Q 572 378 572 386 L 572 396" fill="none" stroke="#8e44ad" stroke-width="1" marker-end="url(#a)"/>
+  <text x="588" y="375" font-size="7" fill="#7d3c98">16d embed</text>
+
+  <!-- Step 5: Ensemble -->
+  <rect x="174" y="402" width="462" height="52" rx="4" fill="#fef9e7" stroke="#f9e79f" stroke-width="0.8"/>
+  <rect x="174" y="402" width="462" height="18" rx="4" fill="#d68910"/>
+  <text x="180" y="414" font-size="8" fill="#fff" font-weight="600">STEP 5</text>
+  <text x="405" y="434" text-anchor="middle" font-size="11" font-weight="700" fill="#7d6608">ensemble.py</text>
+  <text x="405" y="448" text-anchor="middle" font-size="8" fill="#b7950b">XGBoost + LightGBM (Focal Loss) + CatBoost → Logistic Regression Meta-Learner</text>
+
+  <!-- Arrow: Ensemble → SHAP -->
+  <path d="M 320 454 L 320 474 Q 320 482 310 482 L 200 482 Q 192 482 192 490 L 192 500" fill="none" stroke="#d68910" stroke-width="1" marker-end="url(#aO)"/>
+  <!-- Arrow: Ensemble → Fairness -->
+  <path d="M 490 454 L 490 474 Q 490 482 500 482 L 560 482 Q 568 482 568 490 L 568 500" fill="none" stroke="#d68910" stroke-width="1" marker-end="url(#aO)"/>
+
+  <!-- Step 7-8: SHAP -->
+  <rect x="54" y="506" width="276" height="52" rx="4" fill="#fdedec" stroke="#f5b7b1" stroke-width="0.7"/>
+  <rect x="54" y="506" width="276" height="18" rx="4" fill="#c0392b"/>
+  <text x="60" y="518" font-size="8" fill="#fff" font-weight="600">STEP 7-8</text>
+  <text x="192" y="538" text-anchor="middle" font-size="10" font-weight="600" fill="#922b21">shap_explainer.py</text>
+  <text x="192" y="552" text-anchor="middle" font-size="7.5" fill="#b03a2e">Global/Local SHAP + SSR stability + Counterfactual</text>
+
+  <!-- Step 11: Fairness -->
+  <rect x="430" y="506" width="276" height="52" rx="4" fill="#fdedec" stroke="#f5b7b1" stroke-width="0.7"/>
+  <rect x="430" y="506" width="276" height="18" rx="4" fill="#c0392b"/>
+  <text x="436" y="518" font-size="8" fill="#fff" font-weight="600">STEP 11</text>
+  <text x="568" y="538" text-anchor="middle" font-size="10" font-weight="600" fill="#922b21">fairness_audit.py</text>
+  <text x="568" y="552" text-anchor="middle" font-size="7.5" fill="#b03a2e">Gender / Age / Career / Income  |  DPD, TPR Gap, DIR</text>
+
+  <!-- Pseudo labeling (optional path) -->
+  <rect x="54" y="574" width="200" height="36" rx="4" fill="#f2f3f4" stroke="#d5d8dc" stroke-width="0.6"/>
+  <text x="60" y="590" font-size="8" fill="#7f8c8d" font-weight="600">OPTIONAL</text>
+  <text x="154" y="602" text-anchor="middle" font-size="9" fill="#5d6d7e" font-weight="500">pseudo_labeling.py</text>
+
+  <!-- Arrow from shap → output -->
+  <path d="M 192 558 L 192 578 Q 192 586 202 586 L 360 586 Q 370 586 380 586 L 380 622" fill="none" stroke="#922b21" stroke-width="1" marker-end="url(#aR)"/>
+  <!-- Arrow from fairness → output -->
+  <path d="M 568 558 L 568 578 Q 568 586 558 586 L 400 586 Q 390 586 390 596 L 390 622" fill="none" stroke="#922b21" stroke-width="1"/>
+
+  <!-- Output block -->
+  <rect x="280" y="628" width="200" height="44" rx="4" fill="#fdedec" stroke="#c0392b" stroke-width="0.8"/>
+  <text x="380" y="648" text-anchor="middle" font-size="11" font-weight="700" fill="#922b21">Wei_model/output/</text>
+  <text x="380" y="662" text-anchor="middle" font-size="7.5" fill="#b03a2e">metrics | scores | reports | waterfall | model</text>
+
+  <!-- ================================================================ -->
+  <!-- FRONTEND (right side) -->
+  <!-- ================================================================ -->
+  <rect x="760" y="158" width="170" height="530" rx="6" fill="#fff" stroke="#a9dfbf" stroke-width="1.2"/>
+  <rect x="760" y="158" width="170" height="36" rx="6" fill="#27ae60"/>
+  <rect x="760" y="180" width="170" height="14" fill="#27ae60"/>
+  <text x="845" y="182" text-anchor="middle" font-size="12" font-weight="700" fill="#fff" letter-spacing="0.3">frontend/</text>
+
+  <g text-anchor="middle" font-size="8.5">
+    <rect x="774" y="206" width="142" height="40" rx="3" fill="#eafaf1" stroke="#a9dfbf" stroke-width="0.5"/>
+    <text x="845" y="222" font-weight="600" fill="#1e8449">graph/</text>
+    <text x="845" y="236" fill="#5b7a9d" font-size="7.5">2D/3D Network</text>
+
+    <rect x="774" y="256" width="142" height="40" rx="3" fill="#eafaf1" stroke="#a9dfbf" stroke-width="0.5"/>
+    <text x="845" y="272" font-weight="600" fill="#1e8449">stats/</text>
+    <text x="845" y="286" fill="#5b7a9d" font-size="7.5">KPI + Distribution</text>
+
+    <rect x="774" y="306" width="142" height="40" rx="3" fill="#eafaf1" stroke="#a9dfbf" stroke-width="0.5"/>
+    <text x="845" y="322" font-weight="600" fill="#1e8449">fpfn/</text>
+    <text x="845" y="336" fill="#5b7a9d" font-size="7.5">FP/FN + Waterfall</text>
+
+    <rect x="774" y="356" width="142" height="40" rx="3" fill="#eafaf1" stroke="#a9dfbf" stroke-width="0.5"/>
+    <text x="845" y="372" font-weight="600" fill="#1e8449">predict/</text>
+    <text x="845" y="386" fill="#5b7a9d" font-size="7.5">Results Viewer</text>
+
+    <rect x="774" y="416" width="142" height="32" rx="3" fill="#eafaf1" stroke="#a9dfbf" stroke-width="0.5"/>
+    <text x="845" y="436" font-weight="600" fill="#1e8449">api/ &amp; context/</text>
+
+    <rect x="774" y="458" width="142" height="32" rx="3" fill="#eafaf1" stroke="#a9dfbf" stroke-width="0.5"/>
+    <text x="845" y="478" font-weight="600" fill="#1e8449">types/</text>
+  </g>
+
+  <!-- frontend/output -->
+  <rect x="774" y="510" width="142" height="40" rx="3" fill="#d5f5e3" stroke="#27ae60" stroke-width="0.6"/>
+  <text x="845" y="528" text-anchor="middle" font-size="9" font-weight="600" fill="#1e8449">frontend/output/</text>
+  <text x="845" y="542" text-anchor="middle" font-size="7.5" fill="#27ae60">CSV data for viz</text>
+
+  <!-- frontend/dist -->
+  <rect x="774" y="560" width="142" height="34" rx="3" fill="#eafaf1" stroke="#a9dfbf" stroke-width="0.5"/>
+  <text x="845" y="580" text-anchor="middle" font-size="9" font-weight="600" fill="#1e8449">dist/</text>
+
+  <!-- Tech bar -->
+  <rect x="774" y="608" width="142" height="60" rx="3" fill="#f0fdf4" stroke="#a9dfbf" stroke-width="0.5"/>
+  <text x="845" y="626" text-anchor="middle" font-size="7.5" fill="#1e8449" font-weight="600">TECH STACK</text>
+  <text x="845" y="640" text-anchor="middle" font-size="7.5" fill="#5b7a9d">React 18 + TypeScript</text>
+  <text x="845" y="652" text-anchor="middle" font-size="7.5" fill="#5b7a9d">Vite 5 + Tailwind CSS 3</text>
+  <text x="845" y="664" text-anchor="middle" font-size="7.5" fill="#5b7a9d">Three.js + Recharts</text>
+
+  <!-- ================================================================ -->
+  <!-- DATA FLOW: Wei_model/output → frontend/output -->
+  <!-- ================================================================ -->
+  <path d="M 480 650 L 600 650 Q 620 650 620 640 Q 620 536 700 530 Q 740 528 774 528" fill="none" stroke="#27ae60" stroke-width="2" stroke-dasharray="6,3" marker-end="url(#aG)"/>
+  <rect x="620" y="560" width="120" height="18" rx="3" fill="#eafaf1" stroke="#27ae60" stroke-width="0.5"/>
+  <text x="680" y="573" text-anchor="middle" font-size="8" fill="#1e8449" font-weight="600">CSV / JSON export</text>
+
+  <!-- ================================================================ -->
+  <!-- LEGEND -->
+  <!-- ================================================================ -->
+  <rect x="30" y="710" width="900" height="48" rx="4" fill="#fff" stroke="#bdc3c7" stroke-width="0.8"/>
+  <text x="50" y="730" font-size="9" font-weight="700" fill="#2c3e50">DATA FLOW</text>
+
+  <line x1="120" y1="726" x2="155" y2="726" stroke="#2980b9" stroke-width="1.5"/>
+  <circle cx="160" cy="726" r="3" fill="#2980b9"/>
+  <text x="170" y="730" font-size="8" fill="#5b7a9d">Raw data input</text>
+
+  <line x1="260" y1="726" x2="295" y2="726" stroke="#c0392b" stroke-width="1.5"/>
+  <circle cx="300" cy="726" r="3" fill="#c0392b"/>
+  <text x="310" y="730" font-size="8" fill="#5b7a9d">Internal pipeline</text>
+
+  <line x1="410" y1="726" x2="445" y2="726" stroke="#27ae60" stroke-width="1.5" stroke-dasharray="4,2"/>
+  <circle cx="450" cy="726" r="3" fill="#27ae60"/>
+  <text x="460" y="730" font-size="8" fill="#5b7a9d">Output → Frontend</text>
+
+  <line x1="580" y1="726" x2="615" y2="726" stroke="#d68910" stroke-width="1.5"/>
+  <circle cx="620" cy="726" r="3" fill="#d68910"/>
+  <text x="630" y="730" font-size="8" fill="#5b7a9d">Model training flow</text>
+
+  <rect x="738" y="717" width="54" height="18" rx="3" fill="#f2f3f4" stroke="#d5d8dc" stroke-width="0.5"/>
+  <text x="765" y="730" text-anchor="middle" font-size="8" fill="#7f8c8d">Optional</text>
+  <text x="808" y="730" font-size="8" fill="#5b7a9d">Semi-supervised path</text>
+
+  <!-- Footer -->
+  <text x="480" y="775" text-anchor="middle" font-size="9" fill="#95a5a6">BitoGuard  |  BitoGroup x AWS Blacklist User Detection Competition</text>
+</svg>
