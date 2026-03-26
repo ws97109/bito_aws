@@ -11,6 +11,7 @@ import { PredictStatsPanel } from '../predict/PredictStatsPanel';
 import { PredictNodeSelector } from '../predict/PredictNodeSelector';
 import { PredictDetailPanel } from '../predict/PredictDetailPanel';
 import { FeatureInfoPanel } from '../features/FeatureInfoPanel';
+import { FeaturesStatsPanel } from '../features/FeaturesStatsPanel';
 
 export function Dashboard() {
   const { state } = useDashboard();
@@ -19,7 +20,7 @@ export function Dashboard() {
   const isFeaturesMode = state.dashboardMode === 'features';
 
   const renderLeftPanel = () => {
-    if (isFeaturesMode) return null;
+    if (isFeaturesMode) return <FeaturesStatsPanel />;
     if (isPredictMode) return <PredictStatsPanel />;
     if (isFpFnMode) return <FpFnStatsPanel />;
     return <StatsPanel />;
