@@ -17,6 +17,7 @@ function makeDetail(
     account_age_days: ageDays,
     shap_features: shapTop3.map(([feature_name, contribution]) => ({ feature_name, contribution })),
     neighbor_counts: { r1, r2, r3 },
+    neighbor_details: { r1: [], r2_out: [], r2_in: [], r3: [] },
   };
 }
 

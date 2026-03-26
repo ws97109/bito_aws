@@ -51,16 +51,27 @@ export interface ShapFeature {
   contribution: number; // positive = increases risk, negative = decreases risk
 }
 
+export interface NeighborPeer {
+  peer_id: number;
+  node_type: 'user' | 'wallet';
+  node_label?: string;
+  risk_score: number;
+  status: 0 | 1;
+  tx_count: number; // number of edges between this node and center
+}
+
 export interface NodeDetailResponse {
   user_id: number;
   risk_score: number;
   status: 0 | 1;
   account_age_days: number;
-  shap_features: ShapFeature[]; // top-3, may be empty
-  neighbor_counts: {
-    r1: number;
-    r2: number;
-    r3: number;
+  shap_features: ShapFeature[];
+  neighbor_counts: { r1: number; r2: number; r3: number }; // unique peer counts
+  neighbor_details: {
+    r1: NeighborPeer[];     // 錢包→帳戶 (wallets funding this user)
+    r2_out: NeighborPeer[]; // 帳戶→帳戶 outgoing (this user → peer)
+    r2_in: NeighborPeer[];  // 帳戶→帳戶 incoming (peer → this user)
+    r3: NeighborPeer[];     // 帳戶→錢包 (wallets this user sent to)
   };
 }
 

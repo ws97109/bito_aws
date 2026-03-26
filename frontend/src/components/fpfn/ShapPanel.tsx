@@ -53,26 +53,6 @@ function WaterfallChart({ features, baseValue }: WaterfallChartProps) {
       width="100%"
       style={{ display: 'block' }}
     >
-      {/* Final prediction label at top */}
-      <text
-        x={toX(finalValue)} y={PAD_T - 14}
-        textAnchor="middle" fontSize="9"
-        fill="#64748b"
-      >
-        預測值
-      </text>
-      <text
-        x={toX(finalValue)} y={PAD_T - 4}
-        textAnchor="middle" fontSize="11" fontFamily="monospace"
-        fill="#94a3b8" fontWeight="bold"
-      >
-        f(x) = {finalValue.toFixed(3)}
-      </text>
-      <line
-        x1={toX(finalValue)} y1={PAD_T}
-        x2={toX(finalValue)} y2={PAD_T + 4}
-        stroke="#64748b" strokeWidth="1"
-      />
 
       {/* Feature rows */}
       {rows.map((row, i) => {
@@ -143,26 +123,6 @@ function WaterfallChart({ features, baseValue }: WaterfallChartProps) {
         );
       })}
 
-      {/* Base value label at bottom */}
-      <text
-        x={toX(baseValue)} y={TOTAL_H - PAD_B + 12}
-        textAnchor="middle" fontSize="9"
-        fill="#64748b"
-      >
-        基準值
-      </text>
-      <text
-        x={toX(baseValue)} y={TOTAL_H - PAD_B + 23}
-        textAnchor="middle" fontSize="11" fontFamily="monospace"
-        fill="#94a3b8" fontWeight="bold"
-      >
-        E[f(x)] = {baseValue.toFixed(3)}
-      </text>
-      <line
-        x1={toX(baseValue)} y1={TOTAL_H - PAD_B - 3}
-        x2={toX(baseValue)} y2={TOTAL_H - PAD_B + 3}
-        stroke="#64748b" strokeWidth="1"
-      />
     </svg>
   );
 }
