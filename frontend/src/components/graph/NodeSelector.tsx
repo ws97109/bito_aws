@@ -11,7 +11,7 @@ export function getFilteredNodes(nodes: FraudNode[], keyword: string): FraudNode
 
 export function NodeSelector() {
   const { fraudNodes, loading } = useFraudNodes();
-  const { state, dispatch, loadSubgraph } = useDashboard();
+  const { state, dispatch, loadSubgraph, loadNodeDetail } = useDashboard();
   const [keyword, setKeyword] = useState('');
   const [debouncedKeyword, setDebouncedKeyword] = useState('');
 
@@ -25,10 +25,11 @@ export function NodeSelector() {
 
   const handleSelect = useCallback((userId: number) => {
     dispatch({ type: 'SELECT_USER', userId });
+    loadNodeDetail(userId);
     if (!state.subgraphCache.has(userId)) {
       loadSubgraph(userId, 2);
     }
-  }, [dispatch, loadSubgraph, state.subgraphCache]);
+  }, [dispatch, loadSubgraph, loadNodeDetail, state.subgraphCache]);
 
   const getRiskBadge = (score: number) => {
     if (score > 0.9) return { cls: 'bg-red-900/60 text-red-300 ring-1 ring-red-500/50',    label: '極高' };
