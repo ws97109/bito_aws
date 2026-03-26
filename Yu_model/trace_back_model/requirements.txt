@@ -1,0 +1,17 @@
+# trace_back_model dependencies
+# 標準庫（json, logging, collections, dataclasses, pathlib, typing, sys, itertools）不需列出
+
+# 資料處理
+pandas>=1.5.0
+
+# 深度學習（CXGNN alg1/alg2/causal 使用）
+torch>=1.13.0
+
+# 數值計算
+numpy>=1.23.0
+
+# 圖結構（causal.py 使用）
+networkx>=2.8.0
+
+# 視覺化（causal.py plot() 使用，非必要可不裝）
+matplotlib>=3.6.0
