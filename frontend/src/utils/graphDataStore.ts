@@ -17,7 +17,7 @@
  */
 
 import { parseCsvRecords } from './csvParser';
-import type { StatsResponse, FraudNode, FpFnNode, PredictNode, SubgraphResponse, SubgraphNode, SubgraphEdge, NodeDetailResponse, ShapWaterfallResponse, ShapWaterfallFeature, ShapFeature } from '../types/index';
+import type { StatsResponse, FraudNode, FpFnNode, PredictNode, SubgraphResponse, SubgraphNode, SubgraphEdge, NodeDetailResponse, NeighborPeer, ShapWaterfallResponse, ShapWaterfallFeature, ShapFeature } from '../types/index';
 
 // ── 特徵英文 → 中文對照表 ──────────────────────────────────────────────────────
 const FEATURE_NAME_ZH: Record<string, string> = {
@@ -202,8 +202,8 @@ async function loadGraphData(): Promise<void> {
   for (const row of parseCsvRecords(nodeText)) {
     const nodeId = row['node_id'] ?? '';
     const nodeType = row['node_type'] === 'wallet' ? 'wallet' : 'user';
-    const riskScore = parseFloat(row['risk_score'] ?? '0');
-    const label = parseFloat(row['label'] ?? '0');
+    const riskScore = parseFloat(row['risk_score'] || '0');
+    const label = parseFloat(row['label'] || '0');
     let numericId: number;
 
     if (nodeType === 'user') {
@@ -599,19 +599,70 @@ export function hasGraphData(userId: number): boolean {
 
 export async function getComputedNodeDetail(userId: number): Promise<NodeDetailResponse | null> {
   await Promise.all([loadGraphData(), loadShapData()]);
+  const nm = nodeMap!;
   const rec = userIdMap!.get(userId);
   if (!rec) return null;
 
   const adj = adjMap!;
   const edges = adj.get(rec.nodeId) ?? [];
 
-  const neighbor_counts = { r1: 0, r2: 0, r3: 0 };
+  // Build neighbor_details: group by relation type and direction
+  // Use Map<peerId, {rec, txCount}> per bucket
+  const r1Map   = new Map<number, { rec: NodeRecord; count: number }>();
+  const r2OutMap = new Map<number, { rec: NodeRecord; count: number }>();
+  const r2InMap  = new Map<number, { rec: NodeRecord; count: number }>();
+  const r3Map   = new Map<number, { rec: NodeRecord; count: number }>();
+
   for (const edge of edges) {
-    const rel = EDGE_TO_RELATION[edge.edgeType];
-    if (rel === 'R1') neighbor_counts.r1++;
-    else if (rel === 'R2') neighbor_counts.r2++;
-    else if (rel === 'R3') neighbor_counts.r3++;
+    const neighborKey = edge.source === rec.nodeId ? edge.target : edge.source;
+    const neighborRec = nm.get(neighborKey);
+    if (!neighborRec) continue;
+    const peerId = neighborRec.numericId;
+
+    if (edge.edgeType === 'wallet_funds_user') {
+      // R1: wallet → this user (wallet is source)
+      const e = r1Map.get(peerId) ?? { rec: neighborRec, count: 0 };
+      r1Map.set(peerId, { rec: neighborRec, count: e.count + 1 });
+    } else if (edge.edgeType === 'user_transfers_user') {
+      // R2: check direction
+      if (edge.source === rec.nodeId) {
+        // outgoing: this user → peer
+        const e = r2OutMap.get(peerId) ?? { rec: neighborRec, count: 0 };
+        r2OutMap.set(peerId, { rec: neighborRec, count: e.count + 1 });
+      } else {
+        // incoming: peer → this user
+        const e = r2InMap.get(peerId) ?? { rec: neighborRec, count: 0 };
+        r2InMap.set(peerId, { rec: neighborRec, count: e.count + 1 });
+      }
+    } else if (edge.edgeType === 'user_sends_wallet') {
+      // R3: this user → wallet (wallet is target)
+      const e = r3Map.get(peerId) ?? { rec: neighborRec, count: 0 };
+      r3Map.set(peerId, { rec: neighborRec, count: e.count + 1 });
+    }
   }
+
+  const toNeighborPeer = ({ rec: r, count }: { rec: NodeRecord; count: number }): NeighborPeer => ({
+    peer_id: r.numericId,
+    node_type: r.nodeType,
+    node_label: r.nodeId,
+    risk_score: r.riskScore,
+    status: r.label >= 1.0 ? 1 : 0,
+    tx_count: count,
+  });
+
+  const r1Peers    = Array.from(r1Map.values()).map(toNeighborPeer).sort((a, b) => b.risk_score - a.risk_score);
+  const r2OutPeers = Array.from(r2OutMap.values()).map(toNeighborPeer).sort((a, b) => b.risk_score - a.risk_score);
+  const r2InPeers  = Array.from(r2InMap.values()).map(toNeighborPeer).sort((a, b) => b.risk_score - a.risk_score);
+  const r3Peers    = Array.from(r3Map.values()).map(toNeighborPeer).sort((a, b) => b.risk_score - a.risk_score);
+
+  // Unique R2 peer count (union of in+out)
+  const r2UniqueIds = new Set([...r2OutMap.keys(), ...r2InMap.keys()]);
+
+  const neighbor_counts = {
+    r1: r1Map.size,
+    r2: r2UniqueIds.size,
+    r3: r3Map.size,
+  };
 
   // Load SHAP features for this user
   const shapFeatures: ShapFeature[] = [];
@@ -622,10 +673,7 @@ export async function getComputedNodeDetail(userId: number): Promise<NodeDetailR
         if (colName === 'user_id' || shapVal === '' || shapVal == null) continue;
         const contribution = parseFloat(shapVal);
         if (isNaN(contribution)) continue;
-        shapFeatures.push({
-          feature_name: zhFeatureName(colName),
-          contribution,
-        });
+        shapFeatures.push({ feature_name: zhFeatureName(colName), contribution });
       }
       shapFeatures.sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution));
     }
@@ -638,5 +686,6 @@ export async function getComputedNodeDetail(userId: number): Promise<NodeDetailR
     account_age_days: 0,
     shap_features: shapFeatures.slice(0, 10),
     neighbor_counts,
+    neighbor_details: { r1: r1Peers, r2_out: r2OutPeers, r2_in: r2InPeers, r3: r3Peers },
   };
 }

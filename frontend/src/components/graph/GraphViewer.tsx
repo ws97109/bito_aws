@@ -72,7 +72,7 @@ function GraphLegend() {
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export function GraphViewer() {
-  const { state, loadNodeDetail, loadSubgraph } = useDashboard();
+  const { state, dispatch, loadNodeDetail, loadSubgraph } = useDashboard();
   const { subgraph, loading, error, isLargeGraph } = useSubgraph();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const graphRef = useRef<any>(null);
@@ -137,15 +137,33 @@ export function GraphViewer() {
 
   const handleResetView = useCallback(() => graphRef.current?.zoomToFit(500, 80), []);
 
-  // Custom 3-D object: octahedron for wallets, undefined lets the library render default sphere for users
+  // Custom 3-D object: octahedron for wallets, ring+sphere for center user, default sphere otherwise
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const nodeThreeObject = useCallback((node: any): any => {
     const n = node as SubgraphNode;
-    if (n.node_type !== 'wallet') return undefined;
-    const geo = new THREE.OctahedronGeometry(4);
-    const mat = new THREE.MeshLambertMaterial({ color: 0x8b5cf6 });
-    return new THREE.Mesh(geo, mat);
-  }, []);
+    if (n.node_type === 'wallet') {
+      const geo = new THREE.OctahedronGeometry(4);
+      const mat = new THREE.MeshLambertMaterial({ color: 0x8b5cf6 });
+      return new THREE.Mesh(geo, mat);
+    }
+    if (n.user_id === state.selectedUserId) {
+      const group = new THREE.Group();
+      // Inner sphere
+      const sphere = new THREE.Mesh(
+        new THREE.SphereGeometry(6, 16, 16),
+        new THREE.MeshLambertMaterial({ color: 0xfbbf24 }),
+      );
+      // Outer ring
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(9, 1.2, 8, 32),
+        new THREE.MeshLambertMaterial({ color: 0xfde68a }),
+      );
+      group.add(sphere);
+      group.add(ring);
+      return group;
+    }
+    return undefined;
+  }, [state.selectedUserId]);
 
   return (
     <div className="flex flex-col h-full gap-2">
@@ -178,6 +196,19 @@ export function GraphViewer() {
               dangerouslySetInnerHTML={{ __html: btn.label }}
             />
           ))}
+          {state.selectedNode && (
+            <button
+              title="設為中心節點"
+              onClick={() => {
+                const uid = state.selectedNode!.user_id;
+                dispatch({ type: 'SELECT_USER', userId: uid });
+                if (!state.subgraphCache.has(uid)) loadSubgraph(uid, 2);
+              }}
+              className="w-9 h-9 text-xs font-bold flex items-center justify-center bg-indigo-700/80 border border-indigo-500/70 rounded-lg shadow hover:bg-indigo-600 focus:outline-none focus:ring-1 focus:ring-indigo-400 text-indigo-200 backdrop-blur-sm transition-colors"
+            >
+              ⊙
+            </button>
+          )}
         </div>
 
         {!state.selectedUserId ? (
@@ -203,7 +234,11 @@ export function GraphViewer() {
               links: subgraph.edges.map(e => ({ ...e })),
             }}
             nodeColor={(node: any) => getNodeColor(node as SubgraphNode)}
-            nodeVal={(node: any) => (node as SubgraphNode).node_type === 'wallet' ? 1.2 : 1}
+            nodeVal={(node: any) => {
+              const n = node as SubgraphNode;
+              if (n.user_id === state.selectedUserId) return 4;
+              return n.node_type === 'wallet' ? 1.2 : 1;
+            }}
             nodeThreeObject={nodeThreeObject}
             linkColor={(link: any) => getLinkColor(link as SubgraphEdge)}
             linkWidth={1.2}

@@ -21,3 +21,21 @@ venv/
 .env
 
 plot/
+
+# CatBoost temp
+catboost_info/
+Wei_model/model/catboost_info/
+
+# Model output (large files)
+output/
+Wei_model/output/
+!Wei_model/output/gnn_edge_list.csv
+!Wei_model/output/gnn_node_list.csv
+!Wei_model/output/blacklist_analysis.xlsx
+!Wei_model/output/shap_top10_by_group.xlsx
+!Wei_model/output/shap_values_test.csv
+!Wei_model/output/shap_values_all.csv
+!Wei_model/output/shap_values_all_top10.csv
+!Wei_model/output/all_user_risk_scores.xlsx
+!Wei_model/output/predict_detail.csv
+

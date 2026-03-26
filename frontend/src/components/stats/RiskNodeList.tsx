@@ -10,7 +10,7 @@ interface Props {
 }
 
 export function RiskNodeList({ nodes }: Props) {
-  const { state, dispatch, loadSubgraph } = useDashboard();
+  const { state, dispatch, loadSubgraph, loadNodeDetail } = useDashboard();
   const [tab, setTab] = useState<RiskTab>('high');
 
   const filtered = nodes.filter(n =>
@@ -27,6 +27,7 @@ export function RiskNodeList({ nodes }: Props) {
 
   const handleSelect = (userId: number) => {
     dispatch({ type: 'SELECT_USER', userId });
+    loadNodeDetail(userId);
     if (!state.subgraphCache.has(userId)) loadSubgraph(userId, 2);
   };
 
