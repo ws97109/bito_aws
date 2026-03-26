@@ -35,6 +35,8 @@ export interface SubgraphNode {
 export interface SubgraphEdge {
   source: number;
   target: number;
+  // R1=轉出錢包(wallet_funds_user) R2=帳戶轉帳戶(user_transfers_user)
+  // R3=轉入錢包(user_sends_wallet)  R4=共用錢包(derived: 2 users share same wallet)
   relation_type: 'R1' | 'R2' | 'R3';
 }
 

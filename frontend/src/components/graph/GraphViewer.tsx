@@ -17,9 +17,9 @@ export function getNodeColor(node: SubgraphNode): string {
 }
 
 export function getLinkColor(edge: SubgraphEdge): string {
-  if (edge.relation_type === 'R1') return '#0ea5e9';
-  if (edge.relation_type === 'R2') return '#f59e0b';
-  if (edge.relation_type === 'R3') return '#10b981';
+  if (edge.relation_type === 'R1') return '#0ea5e9';  // sky     — 錢包→帳戶
+  if (edge.relation_type === 'R2') return '#f59e0b';  // amber   — 帳戶→帳戶
+  if (edge.relation_type === 'R3') return '#10b981';  // emerald — 帳戶→錢包
   return '#94a3b8';
 }
 
@@ -46,21 +46,24 @@ function GraphLegend() {
         <span className="text-slate-300">正常</span>
       </div>
       <div className="flex items-center gap-1.5">
-        <span className="w-2.5 h-2.5 rounded-full bg-violet-500 flex-shrink-0"></span>
+        <span
+          className="w-3 h-3 flex-shrink-0 inline-block bg-violet-500"
+          style={{ clipPath: 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)' }}
+        ></span>
         <span className="text-slate-300">錢包節點</span>
       </div>
 
       <div className="border-l border-slate-700/60 pl-3 flex items-center gap-1.5">
         <span className="inline-block w-5 h-0.5 bg-sky-500"></span>
-        <span className="text-slate-300">R1 錢包匯入</span>
+        <span className="text-slate-300">錢包→帳戶</span>
       </div>
       <div className="flex items-center gap-1.5">
         <span className="inline-block w-5 h-0.5 bg-amber-500"></span>
-        <span className="text-slate-300">R2 加密內轉</span>
+        <span className="text-slate-300">帳戶→帳戶</span>
       </div>
       <div className="flex items-center gap-1.5">
         <span className="inline-block w-5 h-0.5 bg-emerald-500"></span>
-        <span className="text-slate-300">R3 共用錢包</span>
+        <span className="text-slate-300">帳戶→錢包</span>
       </div>
     </div>
   );
@@ -95,8 +98,20 @@ export function GraphViewer() {
 
   const handleNodeClick = useCallback((node: any) => {
     const n = node as SubgraphNode;
-    if (n.node_type !== 'wallet') loadNodeDetail(n.user_id);
-    // Fly camera toward clicked node
+    if (n.node_type === 'wallet') {
+      // Find connected users via current subgraph edges
+      const edges = subgraph?.edges ?? [];
+      const connectedUserIds = edges
+        .filter(e => e.source === n.user_id || e.target === n.user_id)
+        .map(e => e.source === n.user_id ? e.target : e.source);
+      const connectedUsers = (subgraph?.nodes ?? [])
+        .filter(nd => connectedUserIds.includes(nd.user_id) && nd.node_type === 'user')
+        .sort((a, b) => b.risk_score - a.risk_score);
+      if (connectedUsers.length > 0) loadNodeDetail(connectedUsers[0].user_id);
+    } else {
+      loadNodeDetail(n.user_id);
+    }
+    // Camera flyto (keep existing)
     const distance = 120;
     const { x = 0, y = 0, z = 0 } = node;
     graphRef.current?.cameraPosition(
@@ -104,7 +119,7 @@ export function GraphViewer() {
       { x, y, z },
       800,
     );
-  }, [loadNodeDetail]);
+  }, [loadNodeDetail, subgraph]);
 
   const handleZoomIn  = useCallback(() => {
     const cam = graphRef.current?.camera();
@@ -193,6 +208,9 @@ export function GraphViewer() {
             linkColor={(link: any) => getLinkColor(link as SubgraphEdge)}
             linkWidth={1.2}
             linkOpacity={0.7}
+            linkDirectionalArrowLength={4}
+            linkDirectionalArrowRelPos={1}
+            linkDirectionalArrowColor={(link: any) => getLinkColor(link as SubgraphEdge)}
             onNodeClick={handleNodeClick}
             onEngineStop={handleEngineStop}
             nodeLabel={(node: any) => {

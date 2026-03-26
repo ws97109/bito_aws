@@ -38,6 +38,20 @@ export function RiskBarChart({ data }: RiskBarChartProps) {
           </Bar>
         </BarChart>
       </ResponsiveContainer>
+      <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2">
+        {[
+          { color: '#10b981', label: '低 [0, 0.2)' },
+          { color: '#84cc16', label: '中低 [0.2, 0.4)' },
+          { color: '#f59e0b', label: '中 [0.4, 0.6)' },
+          { color: '#f97316', label: '高 [0.6, 0.8)' },
+          { color: '#ef4444', label: '極高 [0.8, 1.0]' },
+        ].map(item => (
+          <div key={item.label} className="flex items-center gap-1">
+            <span className="w-2 h-2 rounded-sm flex-shrink-0" style={{ backgroundColor: item.color }}></span>
+            <span className="text-[10px] text-slate-400">{item.label}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
