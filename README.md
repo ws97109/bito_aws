@@ -16,7 +16,7 @@
 - [技術棧](#技術棧)
 - [完整 Pipeline](#完整-pipeline)
   - [Step 1：資料載入與驗證](#step-1資料載入與驗證)
-  - [Step 2：特徵工程（81 維 → 63 維）](#step-2特徵工程81-維--63-維)
+  - [Step 2：特徵工程（81 維 → 65 維）](#step-2特徵工程81-維--65-維)
   - [Step 3：異常偵測特徵](#step-3異常偵測特徵)
   - [Step 4：圖神經網路 (GNN)](#step-4圖神經網路-gnn)
   - [Step 5：Stacking Ensemble 集成學習](#step-5stacking-ensemble-集成學習)
@@ -37,7 +37,7 @@
 
 - **異質圖神經網路 (HeteroSAGE + GAT)**：捕捉用戶與錢包地址間的風險傳播路徑
 - **三模型 Stacking Ensemble**：XGBoost + LightGBM (Focal Loss) + CatBoost，各自採用不同損失函數最大化模型多樣性
-- **81 維特徵工程 → 63 維篩選**：涵蓋 KYC 行為、法幣/虛幣交易、IP 風險、圖拓撲、AML 紅旗指標等 11 大類特徵
+- **81 維特徵工程 → 65 維篩選**：涵蓋 KYC 行為、法幣/虛幣交易、IP 風險、圖拓撲、AML 紅旗指標等 10 大類特徵
 - **SHAP 全方位可解釋性**：Global 重要性 + Local 歸因 + 反事實建議 + SSR 穩定性驗證 + 自然語言風險報告
 - **公平性審計**：檢測性別、年齡、職業、收入四維度公平性，主動識別並建議緩解偏差
 - **互動式 3D 儀表板**：React + Three.js 視覺化交易網路圖譜與風險分數
@@ -66,8 +66,8 @@ Bio_AWS_Workshop/
 ├── Wei_model/                          # 核心 ML Pipeline
 │   ├── model/
 │   │   ├── main.py                    # 主訓練流程入口（12 步驟）
-│   │   ├── Feature_rngineering.py     # 特徵工程（11 大類 81 維特徵）
-│   │   ├── feature_selection.py       # 特徵篩選（81 → 63）
+│   │   ├── Feature_engineering.py     # 特徵工程（10 大類 81 維特徵）
+│   │   ├── feature_selection.py       # 特徵篩選（81 → 65）
 │   │   ├── anomaly_detection.py       # 無監督異常偵測（IF / HBOS / LOF）
 │   │   ├── Gnn_model.py              # 異質圖神經網路（HeteroSAGE + GAT）
 │   │   ├── ensemble.py               # Stacking Ensemble（XGB + LGB + CAT）
@@ -127,28 +127,29 @@ Bio_AWS_Workshop/
 
 從 5 張交易表 + 用戶資訊表載入資料，執行嚴格的欄位型態轉換（datetime / int / float / str），缺失值統計報告，並驗證黑名單比例一致性。
 
-### Step 2：特徵工程（81 維 → 63 維）
+### Step 2：特徵工程（81 維 → 65 維）
 
-自 5 張原始交易表中萃取 **81 維特徵**，分為 **11 大類別**：
+自 5 張原始交易表中萃取 **81 維特徵**，分為 **10 大類別**：
 
 | # | 特徵類別 | 數量 | 代表特徵 | 偵測意圖 |
 |---|----------|------|----------|----------|
-| 1 | **用戶人口特徵** | 9 | `kyc_speed_sec`, `account_age_days`, `is_app_user`, `reg_hour` | KYC 異常（秒級完成暗示自動化）、深夜註冊 |
-| 2 | **法幣交易行為** | 12 | `twd_dep_sum`, `twd_net_flow`, `twd_withdraw_ratio` | 淨流出、入金/提領比異常 |
-| 3 | **虛幣交易行為** | 12 | `crypto_wit_sum`, `crypto_wallet_hash_nunique`, `crypto_protocol_diversity` | 多錢包分散提領、跨鏈移轉 |
-| 4 | **掛單/一鍵買賣** | 6 | `trading_buy_ratio`, `swap_sum`, `trading_market_order_ratio` | 單向購買、市價單洗量 |
-| 5 | **IP & 資金流速** | 4 | `ip_unique_count`, `ip_night_ratio`, `ip_max_shared`, `fund_stay_sec` | 多 IP 切換、深夜操作、資金快進快出 |
-| 6 | **交易圖拓撲** | 5 | `pagerank_score`, `connected_component_size` | 資金樞紐、詐騙集團聚集 |
+| 1 | **用戶人口特徵** | 15 | `kyc_speed_sec`, `account_age_days`, `is_female`, `reg_hour`, `reg_is_night` | KYC 異常（秒級完成暗示自動化）、深夜註冊、性別/職業風險 |
+| 2 | **法幣交易行為** | 14 | `twd_dep_sum`, `twd_net_flow`, `twd_withdraw_ratio`, `twd_smurf_flag` | 淨流出、入金/提領比異常、Smurfing 偵測 |
+| 3 | **虛幣交易行為** | 15 | `crypto_wit_sum`, `crypto_wallet_hash_nunique`, `crypto_protocol_diversity` | 多錢包分散提領、跨鏈移轉 |
+| 4 | **掛單/一鍵買賣** | 9 | `trading_buy_ratio`, `swap_sum`, `trading_market_order_ratio`, `total_trading_volume` | 單向購買、市價單洗量 |
+| 5 | **IP & 資金流速** | 5 | `ip_unique_count`, `ip_night_ratio`, `ip_max_shared`, `fund_stay_sec` | 多 IP 切換、深夜操作、資金快進快出 |
+| 6 | **交易圖拓撲** | 5 | `pagerank_score`, `connected_component_size`, `betweenness_centrality` | 資金樞紐、詐騙集團聚集 |
 | 7 | **跨表衍生** | 4 | `total_tx_count`, `weekend_tx_ratio`, `velocity_ratio_7d_vs_30d` | 近期活動加速 |
 | 8 | **AML 紅旗指標** | 6 | `twd_to_crypto_out_ratio`, `same_day_in_out_count`, `tx_amount_cv` | 法幣入→幣出漏斗、Smurfing 拆單 |
-| 9 | **時序模式** | 6 | `tx_interval_mean`, `tx_interval_min`, `amount_p90_p10_ratio` | 規律性操作偵測 |
-| 10 | **異常偵測分數** | 3 | `if_score`, `hbos_score`, `lof_score` | 無監督異常程度 |
-| 11 | **GNN 嵌入** | 16 | `gnn_emb_0` ~ `gnn_emb_15` | 圖結構風險傳播 |
+| 9 | **時序模式** | 7 | `tx_interval_mean`, `tx_interval_min`, `amount_p90_p10_ratio`, `active_days` | 規律性操作偵測、爆發交易 |
+| 10 | **複合風險分數** | 1 | `composite_risk_score` | 多維度風險加權綜合 |
 
-**特徵篩選流程**（81 → 63 維）：
+> 異常偵測分數（3 維）與 GNN 嵌入（16 維）於後續步驟加入（65 + 3 + 16 = 84 維），再經公平性審計移除 `is_female`、`age`，最終模型輸入為 **82 維**。
+
+**特徵篩選流程**（81 → 65 維）：
 1. **零方差移除**：`has_kyc_level2`（1 個）
-2. **高相關性移除**（閾值 ≥ 0.95）：`graph_out_degree`, `trading_sum`, `crypto_dep_sum` 等 13 個
-3. **零重要性移除**：`twd_smurf_flag`, `betweenness_centrality` 等 4 個
+2. **高相關性移除**（閾值 ≥ 0.95）：`graph_out_degree`, `kyc_gap_days`, `trading_sum`, `ip_total_count`, `crypto_external_wit_count`, `tx_burst_count`, `crypto_dep_sum`, `trading_count`, `total_trading_volume`, `twd_wit_mean`, `twd_wit_sum`, `graph_in_degree`, `composite_risk_score`（13 個）
+3. **零重要性移除**：`betweenness_centrality`, `velocity_ratio_7d_vs_30d`（2 個）
 
 ### Step 3：異常偵測特徵
 
@@ -189,16 +190,16 @@ Bio_AWS_Workshop/
 
 | 排名 | 特徵 | 中文 | SHAP 佔比 | 累積 |
 |------|------|------|-----------|------|
-| 1 | `swap_sum` | 一鍵買賣總額 | 5.83% | 5.83% |
-| 2 | `tx_interval_median` | 交易間隔中位數 | 5.83% | 11.65% |
-| 3 | `account_age_days` | 帳號年齡 | 5.67% | 17.32% |
-| 4 | `crypto_wit_sum` | 虛幣提領總額 | 5.00% | 22.32% |
-| 5 | `weekend_tx_ratio` | 週末交易佔比 | 3.48% | 25.80% |
-| 6 | `career_freq` | 職業頻率 | 3.36% | 29.17% |
-| 7 | `ip_night_ratio` | 深夜操作比例 | 3.10% | 32.27% |
-| 8 | `twd_net_flow` | 法幣淨流入金額 | 3.09% | 35.36% |
-| 9 | `tx_interval_mean` | 交易間隔均值 | 2.61% | 37.96% |
-| 10 | `reg_hour` | 註冊時段 | 2.43% | 40.40% |
+| 1 | `tx_interval_median` | 交易間隔中位數 | 5.61% | 5.61% |
+| 2 | `swap_sum` | 一鍵買賣總額 | 5.60% | 11.21% |
+| 3 | `account_age_days` | 帳號年齡 | 5.48% | 16.69% |
+| 4 | `crypto_wit_sum` | 虛幣提領總額 | 4.93% | 21.63% |
+| 5 | `weekend_tx_ratio` | 週末交易佔比 | 3.56% | 25.19% |
+| 6 | `career_freq` | 職業頻率 | 3.36% | 28.55% |
+| 7 | `ip_night_ratio` | 深夜操作比例 | 3.09% | 31.64% |
+| 8 | `twd_net_flow` | 法幣淨流入金額 | 3.00% | 34.64% |
+| 9 | `tx_interval_mean` | 交易間隔均值 | 2.68% | 37.32% |
+| 10 | `reg_hour` | 註冊時段 | 2.41% | 39.73% |
 
 > GNN 嵌入特徵（`gnn_emb_*`）合計貢獻約 **12.8%**，驗證圖結構資訊的有效性。
 > 異常偵測分數（`if_score`, `lof_score`, `hbos_score`）合計貢獻約 **3.0%**。
@@ -221,16 +222,16 @@ Bio_AWS_Workshop/
 
 | 受保護屬性 | 檢測結果 | DPD | TPR Gap | FPR Gap | DIR |
 |-----------|---------|-----|---------|---------|-----|
-| **性別 (Gender)** | **FAIL** | 0.067 ⚠️ | 0.225 ❌ | 0.042 ✅ | 0.261 ❌ |
-| **年齡 (Age)** | **FAIL** | 0.064 ⚠️ | 0.153 ❌ | 0.053 ⚠️ | 0.230 ❌ |
-| **職業風險 (Career)** | **PASS** | 0.006 ✅ | 0.024 ✅ | 0.005 ✅ | 0.870 ✅ |
-| **收入來源 (Income)** | **FAIL** | 0.020 ✅ | 0.084 ⚠️ | 0.016 ✅ | 0.522 ❌ |
+| **性別 (Gender)** | **FAIL** | 0.078 ⚠️ | 0.185 ❌ | 0.054 ⚠️ | 0.281 ❌ |
+| **年齡 (Age)** | **FAIL** | 0.079 ⚠️ | 0.094 ⚠️ | 0.067 ⚠️ | 0.239 ❌ |
+| **職業風險 (Career)** | **PASS** | 0.009 ✅ | 0.028 ✅ | 0.008 ✅ | 0.849 ✅ |
+| **收入來源 (Income)** | **FAIL** | 0.022 ✅ | 0.088 ⚠️ | 0.017 ✅ | 0.587 ❌ |
 
 > **指標說明**：DPD = Demographic Parity Diff, TPR Gap = True Positive Rate 差距, DIR = Disparate Impact Ratio (0.8~1.25 為公平)
 
 **關鍵發現**：
-- 女性用戶 TPR 51.4% vs 男性 28.9%（女性被標記率為男性 1.77 倍）
-- 30-50 歲群組 TPR 46.6% 顯著高於其他年齡段
+- 女性用戶 TPR 54.7% vs 男性 36.2%（女性被標記率為男性 1.51 倍）
+- 30-50 歲群組 TPR 49.7% 顯著高於其他年齡段
 
 **建議緩解措施**：
 - 移除 `is_female` + `age` 特徵（無反洗錢業務正當性）
@@ -269,13 +270,13 @@ Bio_AWS_Workshop/
 
 | 指標 | 數值 | 說明 |
 |------|------|------|
-| **AUC-ROC** | 0.858 | 整體判別能力優秀 |
-| **AUC-PR** | 0.308 | 在高度不平衡下的精確率-召回率表現 |
-| **F1-Score** | 0.361 | 精確率與召回率的調和平均 |
-| **Precision** | 0.321 | 預測為黑名單中，真正是黑名單的比例 |
-| **Recall** | 0.412 | 實際黑名單中，被成功偵測的比例 |
-| **OOF Threshold** | 0.857 | Out-of-Fold 最佳閾值 |
-| **Test Threshold** | 0.868 | 測試集 PR-Curve 最佳 F1 閾值 |
+| **AUC-ROC** | 0.861 | 整體判別能力優秀 |
+| **AUC-PR** | 0.307 | 在高度不平衡下的精確率-召回率表現 |
+| **F1-Score** | 0.357 | 精確率與召回率的調和平均 |
+| **Precision** | 0.291 | 預測為黑名單中，真正是黑名單的比例 |
+| **Recall** | 0.463 | 實際黑名單中，被成功偵測的比例 |
+| **OOF Threshold** | 0.860 | Out-of-Fold 最佳閾值 |
+| **Test Threshold** | 0.841 | 測試集 PR-Curve 最佳 F1 閾值 |
 
 ### 風險報告範例
 
@@ -305,14 +306,21 @@ Bio_AWS_Workshop/
 | 檔案 | 說明 |
 |------|------|
 | `metrics.json` | 模型效能指標 (AUC-ROC / AUC-PR / F1 / Precision / Recall) |
-| `user_risk_scores.csv` | 10,204 位用戶風險分數 + 風險等級 |
-| `all_user_risk_scores.xlsx` | 合併 train + predict 全量分數 |
-| `shap_all_features.csv` | 80 特徵 SHAP 重要性排名（含累積百分比） |
-| `shap_values_all_top10.csv` | 每位用戶 Top 10 SHAP 值 |
+| `ensemble_model.joblib` | 訓練好的集成模型 + 最佳閾值 + 特徵名稱 |
+| `user_risk_scores.csv` | 51,017 位用戶風險分數 + 風險等級 |
+| `all_user_risk_scores.xlsx` | 合併 train + predict 全量分數（63,770 人） |
+| `blacklist_analysis.xlsx` | 黑名單分析（TP / FP / FN / Predict 分群 + SHAP） |
+| `shap_all_features.csv` | 全特徵 SHAP 重要性排名（含累積百分比） |
+| `shap_top20_all_users.csv` | 全量用戶 SHAP Top 20 特徵摘要 |
+| `shap_top20_blacklist.csv` | 黑名單用戶 SHAP Top 20 特徵摘要 |
+| `shap_values_all.csv` | 全量用戶 SHAP 值（63,770 人） |
+| `shap_top10_by_group.xlsx` | 分群 SHAP Top-10（TP / FP / FN / Predict） |
 | `risk_reports.txt` | Top 5 高風險用戶自然語言報告 |
 | `fairness_summary.json` | 四維度公平性審計完整報告 |
 | `fairness_report.csv` | 公平性指標量化數據 |
 | `feature_selection_report.json` | 特徵篩選過程記錄 |
+| `gnn_node_list.csv` | GNN 圖節點清單（用戶 + 錢包，含風險分數） |
+| `gnn_edge_list.csv` | GNN 圖邊清單（交易關係） |
 | `waterfall/*.png` | 50+ 張 SHAP Waterfall 圖（訓練集） |
 | `waterfall_predict/*.png` | 20+ 張 SHAP Waterfall 圖（預測集） |
 | `gnn_model.pt` | 訓練好的 GNN 模型權重 |
@@ -362,7 +370,7 @@ npm run build
 
 | 權重 | 項目 | 本專案對應 |
 |------|------|-----------|
-| 40% | 模型辨識效能（F1-score） | Stacking Ensemble + GNN + Anomaly，AUC-ROC 0.858，F1 0.361 |
+| 40% | 模型辨識效能（F1-score） | Stacking Ensemble + GNN + Anomaly，AUC-ROC 0.861，F1 0.357 |
 | 30% | 風險說明能力（SHAP 可解釋性） | Global/Local SHAP + 反事實 + SSR 穩定性 + 自然語言報告 |
 | 15% | 完整性與實務可用性 | 端到端 12 步 Pipeline + 公平性審計 + 半監督擴增 |
 | 10% | 主題切合及創意度 | 異質圖風險傳播 + AML 紅旗特徵 + 無監督異常偵測融合 |
