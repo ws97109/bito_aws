@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect, useState } from 'react';
+import { useRef, useCallback, useEffect, useState, useMemo } from 'react';
 import ForceGraph3D from 'react-force-graph-3d';
 import * as THREE from 'three';
 import { useDashboard } from '../../context/DashboardContext';
@@ -79,6 +79,14 @@ export function GraphViewer() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 600, height: 400 });
 
+  // Refs to break dependency cycles in stable callbacks
+  const selectedWalletIdRef = useRef(state.selectedWalletId);
+  const selectedUserIdRef = useRef(state.selectedUserId);
+  const subgraphRef = useRef(subgraph);
+  useEffect(() => { selectedWalletIdRef.current = state.selectedWalletId; }, [state.selectedWalletId]);
+  useEffect(() => { selectedUserIdRef.current = state.selectedUserId; }, [state.selectedUserId]);
+  useEffect(() => { subgraphRef.current = subgraph; }, [subgraph]);
+
   // Track container size so the 3-D canvas fills exactly
   useEffect(() => {
     const el = containerRef.current;
@@ -91,10 +99,34 @@ export function GraphViewer() {
     return () => ro.disconnect();
   }, []);
 
-  // Auto-fit camera once force simulation settles
+  // Auto-fit camera once force simulation settles; fly to selected wallet if present.
+  // Uses refs so this callback never changes reference — prevents ForceGraph3D from
+  // restarting the simulation every time subgraph or selectedWalletId updates.
   const handleEngineStop = useCallback(() => {
+    const walletId = selectedWalletIdRef.current;
+    const sg = subgraphRef.current;
+    if (walletId && sg) {
+      const walletNode = sg.nodes.find(n =>
+        n.node_type === 'wallet' &&
+        (n.node_label === walletId || String(n.user_id) === walletId)
+      );
+      if (walletNode) {
+        const graphNode = (graphRef.current?.graphData()?.nodes ?? [])
+          .find((n: any) => n.user_id === walletNode.user_id);
+        if (graphNode) {
+          const { x = 0, y = 0, z = 0 } = graphNode;
+          const distance = 120;
+          graphRef.current?.cameraPosition(
+            { x: x + distance, y: y + distance / 2, z: z + distance },
+            { x, y, z },
+            800,
+          );
+          return;
+        }
+      }
+    }
     graphRef.current?.zoomToFit(600, 80);
-  }, []);
+  }, []); // intentionally empty — reads live values via refs
 
   const handleNodeClick = useCallback((node: any) => {
     const n = node as SubgraphNode;
@@ -137,33 +169,62 @@ export function GraphViewer() {
 
   const handleResetView = useCallback(() => graphRef.current?.zoomToFit(500, 80), []);
 
-  // Custom 3-D object: octahedron for wallets, ring+sphere for center user, default sphere otherwise
+  // Memoize graphData so ForceGraph3D doesn't see new arrays on every render
+  const graphData = useMemo(() => ({
+    nodes: subgraph?.nodes.map(n => ({ ...n, id: n.user_id })) ?? [],
+    links: subgraph?.edges.map(e => ({ ...e })) ?? [],
+  }), [subgraph]);
+
+  const nodeColor = useCallback((node: any) => getNodeColor(node as SubgraphNode), []);
+
+  const nodeVal = useCallback((node: any) => {
+    const n = node as SubgraphNode;
+    const walletId = selectedWalletIdRef.current;
+    const isSelectedWallet = n.node_type === 'wallet' && walletId !== null &&
+      (n.node_label === walletId || String(n.user_id) === walletId);
+    if (isSelectedWallet) return 4;
+    if (n.user_id === selectedUserIdRef.current && !walletId) return 4;
+    return n.node_type === 'wallet' ? 1.2 : 1;
+  }, []);
+
+  const linkColor = useCallback((link: any) => getLinkColor(link as SubgraphEdge), []);
+  const linkArrowColor = useCallback((link: any) => getLinkColor(link as SubgraphEdge), []);
+
+  const nodeLabel = useCallback((node: any) => {
+    const n = node as SubgraphNode;
+    if (n.node_type === 'wallet') return `Wallet: ${n.node_label ?? n.user_id}`;
+    return `User ${n.node_label?.replace('user_', '') ?? n.user_id} | Risk: ${n.risk_score.toFixed(2)}`;
+  }, []);
+
+  // Custom 3-D object: gold ring+sphere for selected wallet or center user, plain octahedron for other wallets.
+  // Uses refs so deps stay empty — prevents ForceGraph3D from rebuilding all node objects on every state change.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const nodeThreeObject = useCallback((node: any): any => {
     const n = node as SubgraphNode;
-    if (n.node_type === 'wallet') {
-      const geo = new THREE.OctahedronGeometry(4);
-      const mat = new THREE.MeshLambertMaterial({ color: 0x8b5cf6 });
-      return new THREE.Mesh(geo, mat);
-    }
-    if (n.user_id === state.selectedUserId) {
+    const walletId = selectedWalletIdRef.current;
+    const userId = selectedUserIdRef.current;
+    const isSelectedWallet = n.node_type === 'wallet' && walletId !== null &&
+      (n.node_label === walletId || String(n.user_id) === walletId);
+    if (isSelectedWallet || (n.user_id === userId && !walletId && n.node_type !== 'wallet')) {
       const group = new THREE.Group();
-      // Inner sphere
-      const sphere = new THREE.Mesh(
+      group.add(new THREE.Mesh(
         new THREE.SphereGeometry(6, 16, 16),
         new THREE.MeshLambertMaterial({ color: 0xfbbf24 }),
-      );
-      // Outer ring
-      const ring = new THREE.Mesh(
+      ));
+      group.add(new THREE.Mesh(
         new THREE.TorusGeometry(9, 1.2, 8, 32),
         new THREE.MeshLambertMaterial({ color: 0xfde68a }),
-      );
-      group.add(sphere);
-      group.add(ring);
+      ));
       return group;
     }
+    if (n.node_type === 'wallet') {
+      return new THREE.Mesh(
+        new THREE.OctahedronGeometry(4),
+        new THREE.MeshLambertMaterial({ color: 0x8b5cf6 }),
+      );
+    }
     return undefined;
-  }, [state.selectedUserId]);
+  }, []); // intentionally empty — reads live values via refs
 
   return (
     <div className="flex flex-col h-full gap-2">
@@ -229,30 +290,19 @@ export function GraphViewer() {
             ref={graphRef}
             width={dimensions.width}
             height={dimensions.height}
-            graphData={{
-              nodes: subgraph.nodes.map(n => ({ ...n, id: n.user_id })),
-              links: subgraph.edges.map(e => ({ ...e })),
-            }}
-            nodeColor={(node: any) => getNodeColor(node as SubgraphNode)}
-            nodeVal={(node: any) => {
-              const n = node as SubgraphNode;
-              if (n.user_id === state.selectedUserId) return 4;
-              return n.node_type === 'wallet' ? 1.2 : 1;
-            }}
+            graphData={graphData}
+            nodeColor={nodeColor}
+            nodeVal={nodeVal}
             nodeThreeObject={nodeThreeObject}
-            linkColor={(link: any) => getLinkColor(link as SubgraphEdge)}
+            linkColor={linkColor}
             linkWidth={1.2}
             linkOpacity={0.7}
             linkDirectionalArrowLength={4}
             linkDirectionalArrowRelPos={1}
-            linkDirectionalArrowColor={(link: any) => getLinkColor(link as SubgraphEdge)}
+            linkDirectionalArrowColor={linkArrowColor}
             onNodeClick={handleNodeClick}
             onEngineStop={handleEngineStop}
-            nodeLabel={(node: any) => {
-              const n = node as SubgraphNode;
-              if (n.node_type === 'wallet') return `Wallet: ${n.node_label ?? n.user_id}`;
-              return `User ${n.node_label?.replace('user_', '') ?? n.user_id} | Risk: ${n.risk_score.toFixed(2)}`;
-            }}
+            nodeLabel={nodeLabel}
             backgroundColor="rgba(0,0,0,0)"
             showNavInfo={false}
           />

@@ -115,6 +115,7 @@ export interface DashboardState {
   stats: StatsResponse | null;
   fraudNodes: FraudNode[];
   selectedUserId: number | null;
+  selectedWalletId: string | null;
   subgraph: SubgraphResponse | null;
   selectedNode: NodeDetailResponse | null;
   subgraphCache: Map<number, SubgraphResponse>;

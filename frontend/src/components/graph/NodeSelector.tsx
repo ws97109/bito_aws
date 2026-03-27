@@ -56,6 +56,14 @@ export function NodeSelector() {
     }
   }, [dispatch, loadSubgraph, loadNodeDetail, state.subgraphCache]);
 
+  const handleSelectWallet = useCallback((walletId: string, userId: number) => {
+    dispatch({ type: 'SELECT_WALLET', walletId, userId });
+    loadNodeDetail(userId);
+    if (!state.subgraphCache.has(userId)) {
+      loadSubgraph(userId, 2);
+    }
+  }, [dispatch, loadSubgraph, loadNodeDetail, state.subgraphCache]);
+
   const getRiskBadge = (score: number) => {
     if (score > 0.9) return { cls: 'bg-red-900/60 text-red-300 ring-1 ring-red-500/50',    label: '極高' };
     if (score > 0.7) return { cls: 'bg-orange-900/60 text-orange-300 ring-1 ring-orange-500/50', label: '高' };
@@ -177,16 +185,16 @@ export function NodeSelector() {
             <ul className="divide-y divide-slate-700/40">
               {walletResults.map((r, i) => {
                 const badge = getRiskBadge(r.riskScore);
-                const isSelected = state.selectedUserId === r.userId;
+                const isSelected = state.selectedWalletId === r.walletId;
                 const relLabel = r.relationType === 'R1' ? '資金流入' : '資金流出';
                 const relCls   = r.relationType === 'R1' ? 'text-emerald-400' : 'text-orange-400';
                 return (
                   <li key={`${r.walletId}-${r.userId}-${i}`}>
                     <button
-                      onClick={() => handleSelect(r.userId)}
+                      onClick={() => handleSelectWallet(r.walletId, r.userId)}
                       className={`w-full text-left px-3 py-2 focus:outline-none transition-colors
                                   ${isSelected
-                                    ? 'bg-indigo-500/25 border-l-2 border-indigo-400'
+                                    ? 'bg-amber-500/20 border-l-2 border-amber-400'
                                     : 'border-l-2 border-transparent hover:bg-slate-700/40'}`}
                     >
                       {/* Wallet ID row */}

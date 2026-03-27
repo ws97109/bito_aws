@@ -18,6 +18,7 @@ type Action =
   | { type: 'SET_FRAUD_NODES_SUCCESS'; data: FraudNode[] }
   | { type: 'SET_FRAUD_NODES_ERROR'; error: string }
   | { type: 'SELECT_USER'; userId: number }
+  | { type: 'SELECT_WALLET'; walletId: string; userId: number }
   | { type: 'SET_SUBGRAPH_LOADING' }
   | { type: 'SET_SUBGRAPH_SUCCESS'; data: SubgraphResponse }
   | { type: 'SET_SUBGRAPH_ERROR'; error: string }
@@ -42,6 +43,7 @@ const initialState: DashboardState = {
   stats: null,
   fraudNodes: [],
   selectedUserId: null,
+  selectedWalletId: null,
   subgraph: null,
   selectedNode: null,
   subgraphCache: new Map(),
@@ -78,6 +80,18 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
       return {
         ...state,
         selectedUserId: action.userId,
+        selectedWalletId: null,
+        subgraph: cached ?? state.subgraph,
+        loading: { ...state.loading, subgraph: cached ? false : state.loading.subgraph },
+      };
+    }
+
+    case 'SELECT_WALLET': {
+      const cached = state.subgraphCache.get(action.userId);
+      return {
+        ...state,
+        selectedUserId: action.userId,
+        selectedWalletId: action.walletId,
         subgraph: cached ?? state.subgraph,
         loading: { ...state.loading, subgraph: cached ? false : state.loading.subgraph },
       };
@@ -104,9 +118,9 @@ function dashboardReducer(state: DashboardState, action: Action): DashboardState
       return { ...state, loading: { ...state.loading, nodeDetail: false }, error: { ...state.error, nodeDetail: action.error } };
 
     case 'SET_DASHBOARD_MODE':
-      return { ...state, dashboardMode: action.mode, selectedUserId: null, subgraph: null, selectedNode: null };
+      return { ...state, dashboardMode: action.mode, selectedUserId: null, selectedWalletId: null, subgraph: null, selectedNode: null };
     case 'SET_FPFN_MODE':
-      return { ...state, fpFnMode: action.mode, selectedUserId: null, subgraph: null, selectedNode: null };
+      return { ...state, fpFnMode: action.mode, selectedUserId: null, selectedWalletId: null, subgraph: null, selectedNode: null };
 
     case 'SET_FPFN_NODES_LOADING':
       return { ...state, loading: { ...state.loading, fpFnNodes: true }, error: { ...state.error, fpFnNodes: null } };
