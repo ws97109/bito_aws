@@ -3,7 +3,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Cell, ReferenceLine,
 } from 'recharts';
-import { getShapTop20AllUsers, getShapTop20Blacklist } from '../../utils/graphDataStore';
+import { getShapTop20AllUsers, getShapTop20Blacklist, getShapTop10FP, getShapTop10FN } from '../../utils/graphDataStore';
 import type { ShapTop20Entry } from '../../utils/graphDataStore';
 
 // ── 特徵類別色彩對應 ──────────────────────────────────────────────────────────
@@ -257,18 +257,27 @@ function CompareChart({ allData, blacklistData }: { allData: ShapTop20Entry[]; b
 
 // ── 主元件 ────────────────────────────────────────────────────────────────────
 
-type Tab = 'all' | 'blacklist' | 'compare' | 'categories';
+type Tab = 'all' | 'blacklist' | 'fp' | 'fn' | 'compare' | 'categories';
 
 export function FeatureInfoPanel() {
   const [allData,       setAllData]       = useState<ShapTop20Entry[]>([]);
   const [blacklistData, setBlacklistData] = useState<ShapTop20Entry[]>([]);
+  const [fpData,        setFpData]        = useState<ShapTop20Entry[]>([]);
+  const [fnData,        setFnData]        = useState<ShapTop20Entry[]>([]);
   const [loading,       setLoading]       = useState(true);
   const [activeTab,     setActiveTab]     = useState<Tab>('all');
 
   useEffect(() => {
-    Promise.all([getShapTop20AllUsers(), getShapTop20Blacklist()]).then(([a, b]) => {
+    Promise.all([
+      getShapTop20AllUsers(),
+      getShapTop20Blacklist(),
+      getShapTop10FP(),
+      getShapTop10FN(),
+    ]).then(([a, b, fp, fn]) => {
       setAllData(a);
       setBlacklistData(b);
+      setFpData(fp);
+      setFnData(fn);
       setLoading(false);
     });
   }, []);
@@ -276,6 +285,8 @@ export function FeatureInfoPanel() {
   const TABS: { id: Tab; label: string }[] = [
     { id: 'all',        label: '📈 整體重要性' },
     { id: 'blacklist',  label: '🚫 黑名單重要性' },
+    { id: 'fp',         label: '⚠️ FP 誤判特徵' },
+    { id: 'fn',         label: '🔍 FN 漏判特徵' },
     { id: 'compare',    label: '🔄 對比分析' },
     { id: 'categories', label: '🗂️ 特徵類別' },
   ];
@@ -353,6 +364,22 @@ export function FeatureInfoPanel() {
                   title="Top 20 特徵重要性（黑名單用戶）"
                   subtitle="來源：shap_top20_blacklist.csv — 僅黑名單用戶的平均 |SHAP| 值排名"
                   color="#f87171"
+                />
+              )}
+              {activeTab === 'fp' && (
+                <ShapBarChart
+                  data={fpData.slice(0, 3)}
+                  title="Top 3 特徵重要性（FP：白預測成黑）"
+                  subtitle="來源：shap_values_fp.csv — 被誤判為黑名單的白名單用戶，平均 |SHAP| 值前三名"
+                  color="#fb923c"
+                />
+              )}
+              {activeTab === 'fn' && (
+                <ShapBarChart
+                  data={fnData.slice(0, 3)}
+                  title="Top 3 特徵重要性（FN：黑預測成白）"
+                  subtitle="來源：shap_values_fn.csv — 被漏判為白名單的黑名單用戶，平均 |SHAP| 值前三名"
+                  color="#a78bfa"
                 />
               )}
               {activeTab === 'compare' && (

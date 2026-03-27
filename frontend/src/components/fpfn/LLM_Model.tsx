@@ -149,10 +149,6 @@ export function LLM_Model() {
         </span>
       </div>
 
-      {/* Description */}
-      <p className="text-[10px] text-slate-500 leading-relaxed">
-        由 Groq LLaMA-3.3-70B 結合上方 SHAP 特徵貢獻，深度解析此用戶被{isFp ? '誤判為詐騙' : '漏判詐騙'}的原因。
-      </p>
 
       {/* Action buttons */}
       <div className="flex items-center gap-2">
