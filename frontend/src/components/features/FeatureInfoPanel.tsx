@@ -354,7 +354,7 @@ export function FeatureInfoPanel() {
                 <ShapBarChart
                   data={allData}
                   title="Top 20 特徵重要性（全體用戶）"
-                  subtitle="來源：shap_top20_all_users.csv — 所有用戶的平均 |SHAP| 值排名"
+                  subtitle=""
                   color="#38bdf8"
                 />
               )}
@@ -362,7 +362,7 @@ export function FeatureInfoPanel() {
                 <ShapBarChart
                   data={blacklistData}
                   title="Top 20 特徵重要性（黑名單用戶）"
-                  subtitle="來源：shap_top20_blacklist.csv — 僅黑名單用戶的平均 |SHAP| 值排名"
+                  subtitle=""
                   color="#f87171"
                 />
               )}
@@ -370,7 +370,7 @@ export function FeatureInfoPanel() {
                 <ShapBarChart
                   data={fpData.slice(0, 3)}
                   title="Top 3 特徵重要性（FP：白預測成黑）"
-                  subtitle="來源：shap_values_fp.csv — 被誤判為黑名單的白名單用戶，平均 |SHAP| 值前三名"
+                  subtitle=""
                   color="#fb923c"
                 />
               )}
@@ -378,7 +378,7 @@ export function FeatureInfoPanel() {
                 <ShapBarChart
                   data={fnData.slice(0, 3)}
                   title="Top 3 特徵重要性（FN：黑預測成白）"
-                  subtitle="來源：shap_values_fn.csv — 被漏判為白名單的黑名單用戶，平均 |SHAP| 值前三名"
+                  subtitle=""
                   color="#a78bfa"
                 />
               )}

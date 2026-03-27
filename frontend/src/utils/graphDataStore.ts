@@ -939,59 +939,17 @@ export async function getShapTop20Blacklist(): Promise<ShapTop20Entry[]> {
 let shapTop10FPCache: ShapTop20Entry[] | null = null;
 let shapTop10FNCache: ShapTop20Entry[] | null = null;
 
-async function computeShapTopN(csvPath: string, topN: number): Promise<ShapTop20Entry[]> {
-  const text = await fetchCsv(csvPath);
-  const records = parseCsvRecords(text);
-
-  const stats = new Map<string, { sumAbs: number; posCount: number; count: number }>();
-  for (const row of records) {
-    for (const [col, val] of Object.entries(row)) {
-      if (col === 'user_id' || val === '' || val == null) continue;
-      const num = parseFloat(val as string);
-      if (isNaN(num)) continue;
-      const s = stats.get(col) ?? { sumAbs: 0, posCount: 0, count: 0 };
-      s.sumAbs += Math.abs(num);
-      if (num > 0) s.posCount += 1;
-      s.count += 1;
-      stats.set(col, s);
-    }
-  }
-
-  let totalMeanAbs = 0;
-  const featureStats = Array.from(stats.entries()).map(([col, { sumAbs, posCount, count }]) => {
-    const meanAbs = sumAbs / count;
-    totalMeanAbs += meanAbs;
-    return { col, meanAbs, posCount };
-  });
-
-  featureStats.sort((a, b) => b.meanAbs - a.meanAbs);
-  const topEntries = featureStats.slice(0, topN);
-
-  let cumSum = 0;
-  return topEntries.map(({ col, meanAbs, posCount }, i) => {
-    const pctVal = totalMeanAbs > 0 ? (meanAbs / totalMeanAbs) * 100 : 0;
-    cumSum += pctVal;
-    return {
-      rank:    i + 1,
-      feature: col,
-      label:   zhFeatureName(col),
-      shap:    parseFloat(meanAbs.toFixed(6)),
-      pct:     pctVal.toFixed(2) + '%',
-      freq:    posCount,
-      cumPct:  cumSum.toFixed(2) + '%',
-    };
-  });
-}
-
 export async function getShapTop10FP(): Promise<ShapTop20Entry[]> {
   if (shapTop10FPCache) return shapTop10FPCache;
-  shapTop10FPCache = await computeShapTopN('/output/shap_values_fp.csv', 10);
+  const text = await fetchCsv('/output/shap_top10_fp.csv');
+  shapTop10FPCache = parseShapTop20(text);
   return shapTop10FPCache;
 }
 
 export async function getShapTop10FN(): Promise<ShapTop20Entry[]> {
   if (shapTop10FNCache) return shapTop10FNCache;
-  shapTop10FNCache = await computeShapTopN('/output/shap_values_fn.csv', 10);
+  const text = await fetchCsv('/output/shap_top10_fn.csv');
+  shapTop10FNCache = parseShapTop20(text);
   return shapTop10FNCache;
 }
 
