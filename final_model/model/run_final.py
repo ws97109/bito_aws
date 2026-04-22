@@ -69,9 +69,9 @@ def main():
     ap.add_argument("--predict_dir",
                     default=os.path.join(ROOT, "adjust_data", "predict"))
     ap.add_argument("--baseline_dir",
-                    default=os.path.join(ROOT, "Wei_model", "output", "baseline"))
+                    default=os.path.join(ROOT, "final_model", "output", "baseline"))
     ap.add_argument("--output_dir",
-                    default=os.path.join(ROOT, "Wei_model", "output", "final"))
+                    default=os.path.join(ROOT, "final_model", "output", "final"))
     ap.add_argument("--cost_fn", type=float, default=10.0)
     ap.add_argument("--cost_fp", type=float, default=1.0)
     args = ap.parse_args()

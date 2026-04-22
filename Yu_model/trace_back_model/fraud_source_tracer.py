@@ -73,9 +73,9 @@ class FraudSourceTracer:
         twd_transfer 資料表（需含 created_at, user_id, kind, ori_samount）。
     risk_df : DataFrame
         Index = user_id (int)，需含 'risk_score' 欄位。
-        由 Wei_model main.py Step 9 輸出的 user_risk_scores.csv 讀入即可。
+        由 final_model main.py Step 9 輸出的 user_risk_scores.csv 讀入即可。
     gnn_edge_df : DataFrame, optional
-        Wei_model 輸出的 gnn_edge_list.csv（需含 source, target, edge_type）。
+        final_model 輸出的 gnn_edge_list.csv（需含 source, target, edge_type）。
         補充 crypto/twd 未涵蓋的圖結構邊，擴充反向追溯的可達路徑。
     """
 

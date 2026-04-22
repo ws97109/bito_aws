@@ -34,7 +34,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 DEFAULT_DATA_DIR   = ROOT_DIR / "adjust_data" / "train"
-DEFAULT_WEI_OUTPUT = ROOT_DIR / "Wei_model" / "output"
+DEFAULT_FINAL_OUTPUT = ROOT_DIR / "final_model" / "output"
 DEFAULT_OUTPUT     = THIS_DIR / "output"
 
 
@@ -51,17 +51,17 @@ def load_tx_data(data_dir: Path) -> pd.DataFrame:
     return df
 
 
-def load_gnn_graph(wei_output_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
+def load_gnn_graph(final_output_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
     """載入 gnn_node_list / gnn_edge_list。"""
-    node_path = wei_output_dir / "gnn_node_list.csv"
-    edge_path = wei_output_dir / "gnn_edge_list.csv"
+    node_path = final_output_dir / "gnn_node_list.csv"
+    edge_path = final_output_dir / "gnn_edge_list.csv"
     gnn_node = pd.read_csv(node_path)
     gnn_edge = pd.read_csv(edge_path, low_memory=False)
     logger.info("  GNN nodes: %d  edges: %d", len(gnn_node), len(gnn_edge))
     return gnn_node, gnn_edge
 
 
-def load_fraud_nodes(wei_output_dir: Path) -> tuple[list[str], pd.DataFrame]:
+def load_fraud_nodes(final_output_dir: Path) -> tuple[list[str], pd.DataFrame]:
     """
     從 white_to_black + blacklist_analysis 取得詐騙節點。
     兩份檔案已經都是詐騙節點（不需要再過濾 status）。
@@ -71,8 +71,8 @@ def load_fraud_nodes(wei_output_dir: Path) -> tuple[list[str], pd.DataFrame]:
     fraud_ids : list[str]   節點 ID，格式為 "user_XXXXX"
     risk_df   : DataFrame   index=user_id(int)，欄位=[risk_score, status]
     """
-    w2b = pd.read_csv(wei_output_dir / "white_to_black.csv")
-    bl  = pd.read_csv(wei_output_dir / "blacklist_analysis.csv", low_memory=False)
+    w2b = pd.read_csv(final_output_dir / "white_to_black.csv")
+    bl  = pd.read_csv(final_output_dir / "blacklist_analysis.csv", low_memory=False)
 
     # 只取需要的欄位
     w2b = w2b[["user_id", "risk_score"]].copy()
@@ -96,7 +96,7 @@ def load_fraud_nodes(wei_output_dir: Path) -> tuple[list[str], pd.DataFrame]:
 
 def main(
     data_dir:      Path  = DEFAULT_DATA_DIR,
-    wei_output:    Path  = DEFAULT_WEI_OUTPUT,
+    final_output:    Path  = DEFAULT_FINAL_OUTPUT,
     output_dir:    Path  = DEFAULT_OUTPUT,
     max_hops:      int   = 5,
     min_amount:    float = 0.0,
@@ -114,12 +114,12 @@ def main(
     print("\n" + "="*60)
     print("[Step 2] 載入 GNN 圖資料（node_list / edge_list）")
     print("="*60)
-    gnn_node, gnn_edge = load_gnn_graph(wei_output)
+    gnn_node, gnn_edge = load_gnn_graph(final_output)
 
     print("\n" + "="*60)
     print("[Step 3] 識別詐騙節點（white_to_black + blacklist_analysis）")
     print("="*60)
-    fraud_ids, risk_df = load_fraud_nodes(wei_output)
+    fraud_ids, risk_df = load_fraud_nodes(final_output)
     print(f"  詐騙節點總數：{len(fraud_ids)}")
 
     print("\n" + "="*60)
@@ -185,7 +185,7 @@ def main(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Fraud Source Tracer — GNN Predict 版本")
     parser.add_argument("--data_dir",    type=str, default=str(DEFAULT_DATA_DIR))
-    parser.add_argument("--wei_output",  type=str, default=str(DEFAULT_WEI_OUTPUT))
+    parser.add_argument("--final_output",  type=str, default=str(DEFAULT_FINAL_OUTPUT))
     parser.add_argument("--output_dir",  type=str, default=str(DEFAULT_OUTPUT))
     parser.add_argument("--max_hops",    type=int,   default=5)
     parser.add_argument("--min_amount",  type=float, default=0.0)
@@ -195,7 +195,7 @@ if __name__ == "__main__":
 
     main(
         data_dir=Path(args.data_dir),
-        wei_output=Path(args.wei_output),
+        final_output=Path(args.final_output),
         output_dir=Path(args.output_dir),
         max_hops=args.max_hops,
         min_amount=args.min_amount,

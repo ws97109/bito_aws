@@ -1,10 +1,10 @@
-# 特徵英文 → 中文名稱對照表（Wei_model）
+# 特徵英文 → 中文名稱對照表（final_model）
 
 ## 來源檔案
 
 | 檔案路徑 | 變數名稱 | 特徵數 |
 |----------|---------|--------|
-| `Wei_model/model/shap_explainer.py` | `FEATURE_NAME_MAP` | 47 |
+| `final_model/model/shap_explainer.py` | `FEATURE_NAME_MAP` | 47 |
 | `frontend/src/utils/graphDataStore.ts` | `FEATURE_NAME_ZH` | 80+ |
 
 ---
@@ -179,7 +179,7 @@
 ## 運作機制
 
 ```
-Wei_model 後端 Python                 前端 TypeScript
+final_model 後端 Python                 前端 TypeScript
 ┌─────────────────────┐              ┌──────────────────────────┐
 │ shap_explainer.py   │              │ graphDataStore.ts        │
 │                     │              │                          │

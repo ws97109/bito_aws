@@ -138,9 +138,9 @@ def main():
     ap.add_argument("--data_dir",
                     default=os.path.join(ROOT, "adjust_data", "train"))
     ap.add_argument("--baseline_dir",
-                    default=os.path.join(ROOT, "Wei_model", "output", "baseline"))
+                    default=os.path.join(ROOT, "final_model", "output", "baseline"))
     ap.add_argument("--output_dir",
-                    default=os.path.join(ROOT, "Wei_model", "output", "improved_v2"))
+                    default=os.path.join(ROOT, "final_model", "output", "improved_v2"))
     ap.add_argument("--pu_method", choices=("bagging", "elkanoto"),
                     default="bagging")
     ap.add_argument("--cost_fn", type=float, default=10.0)

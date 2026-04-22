@@ -6,7 +6,7 @@ import os
 import pandas as pd
 import numpy as np
 
-# Wei_model/ → 專案根目錄
+# final_model/ → 專案根目錄
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(_SCRIPT_DIR)
 

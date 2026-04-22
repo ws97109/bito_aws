@@ -20,9 +20,9 @@ import pandas as pd
 import torch
 from sklearn.model_selection import train_test_split
 
-# Wei_model/model/ → Wei_model/ → 專案根目錄
+# final_model/model/ → final_model/ → 專案根目錄
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-WEI_MODEL_DIR = os.path.dirname(os.path.abspath(__file__))  # Wei_model/model/
+FINAL_MODEL_DIR = os.path.dirname(os.path.abspath(__file__))  # final_model/model/
 sys.path.insert(0, ROOT)
 
 # 直接從當前目錄導入（所有模組都在 model/ 目錄下）
@@ -249,7 +249,7 @@ def train_gnn(
 def main(
     data_dir: str = os.path.join(ROOT, "adjust_data", "train"),
     predict_dir: str = os.path.join(ROOT, "adjust_data", "predict"),
-    output_dir: str = os.path.join(os.path.dirname(WEI_MODEL_DIR), "output"),
+    output_dir: str = os.path.join(os.path.dirname(FINAL_MODEL_DIR), "output"),
     skip_gnn: bool = False,
     use_focal_loss: bool = True,
     use_smote: bool = False,
@@ -1253,8 +1253,8 @@ if __name__ == "__main__":
         help="Predict 資料夾路徑（pseudo-labeling 用）",
     )
     parser.add_argument(
-        "--output", default=os.path.join(os.path.dirname(WEI_MODEL_DIR), "output"),
-        help="輸出目錄（預設：Wei_model/output/）",
+        "--output", default=os.path.join(os.path.dirname(FINAL_MODEL_DIR), "output"),
+        help="輸出目錄（預設：final_model/output/）",
     )
     parser.add_argument(
         "--skip_gnn", action="store_true", default=False,

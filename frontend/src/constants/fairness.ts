@@ -9,7 +9,7 @@
  * project_fairness_audit_results.md).
  */
 export const FAIRNESS_SOURCE = {
-  notebook: 'Wei_model/output/baseline_loo/fairness_summary.json',
+  notebook: 'final_model/output/baseline_loo/fairness_summary.json',
   runDate:  '2026-04-21',
   split:    'test',
 };

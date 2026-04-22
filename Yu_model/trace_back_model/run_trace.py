@@ -1,7 +1,7 @@
 """
 trace_back_model 獨立啟動腳本
 ==============================
-不需要先跑 Wei_model，直接從原始 CSV 跑完整追溯流程。
+不需要先跑 final_model，直接從原始 CSV 跑完整追溯流程。
 
 用法：
     # 最簡單（用 adjust_data/train/ 預設資料）
@@ -10,8 +10,8 @@ trace_back_model 獨立啟動腳本
     # 指定資料目錄
     python run_trace.py --data_dir ../../adjust_data/train
 
-    # 同時使用 Wei_model 輸出的風險評分（讓源頭節點的分數更準）
-    python run_trace.py --risk_csv ../../Wei_model/output/all_user_risk_scores.csv
+    # 同時使用 final_model 輸出的風險評分（讓源頭節點的分數更準）
+    python run_trace.py --risk_csv ../../final_model/output/all_user_risk_scores.csv
 
     # 跳過 CXGNN 驗證（只跑 Method B，速度快）
     python run_trace.py --skip_cxgnn
@@ -46,7 +46,7 @@ logger = logging.getLogger(__name__)
 
 # ── 預設資料路徑 ─────────────────────────────────────────────────────────────
 DEFAULT_DATA_DIR  = ROOT_DIR / "adjust_data" / "train"
-DEFAULT_WEI_DIR   = ROOT_DIR / "Wei_model" / "output"
+DEFAULT_FINAL_DIR   = ROOT_DIR / "final_model" / "output"
 DEFAULT_OUTPUT    = THIS_DIR / "output"
 
 
@@ -54,23 +54,23 @@ DEFAULT_OUTPUT    = THIS_DIR / "output"
 
 def load_data(
     data_dir: Path,
-    wei_dir: Path,
+    final_dir: Path,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     載入所有資料：
-      - user_info  ← Wei_model/output/blacklist_analysis.csv + white_to_black.csv
+      - user_info  ← final_model/output/blacklist_analysis.csv + white_to_black.csv
       - crypto_df  ← adjust_data/train/crypto_transfer_train.csv
       - twd_df     ← adjust_data/train/twd_transfer_train.csv
-      - gnn_edge   ← Wei_model/output/gnn_edge_list.csv
-      - gnn_node   ← Wei_model/output/gnn_node_list.csv
+      - gnn_edge   ← final_model/output/gnn_edge_list.csv
+      - gnn_node   ← final_model/output/gnn_node_list.csv
     回傳 (crypto_df, twd_df, user_info_df, gnn_edge_df, gnn_node_df)。
     """
     # ── user_info：合併 blacklist_analysis + white_to_black ──────────────────
-    bl_path  = wei_dir / "blacklist_analysis.csv"
-    w2b_path = wei_dir / "white_to_black.csv"
+    bl_path  = final_dir / "blacklist_analysis.csv"
+    w2b_path = final_dir / "white_to_black.csv"
     for p in (bl_path, w2b_path):
         if not p.exists():
-            raise FileNotFoundError(f"找不到 Wei_model 輸出檔：{p}")
+            raise FileNotFoundError(f"找不到 final_model 輸出檔：{p}")
     bl  = pd.read_csv(bl_path)
     w2b = pd.read_csv(w2b_path)
     user_info = pd.concat([bl, w2b], ignore_index=True).drop_duplicates("user_id")
@@ -98,8 +98,8 @@ def load_data(
         logger.info("  載入 %-30s  %d 筆", path.name, len(dfs[key]))
 
     # ── GNN 圖資料 ───────────────────────────────────────────────────────────
-    gnn_edge_path = wei_dir / "gnn_edge_list.csv"
-    gnn_node_path = wei_dir / "gnn_node_list.csv"
+    gnn_edge_path = final_dir / "gnn_edge_list.csv"
+    gnn_node_path = final_dir / "gnn_node_list.csv"
     for p in (gnn_edge_path, gnn_node_path):
         if not p.exists():
             raise FileNotFoundError(f"找不到 GNN 資料檔：{p}")
@@ -114,10 +114,10 @@ def load_data(
 def build_risk_df(user_info: pd.DataFrame) -> pd.DataFrame:
     """
     建立 risk_df（index=user_id，含 risk_score）。
-    user_info 來自 Wei_model 輸出（blacklist_analysis + white_to_black），
+    user_info 來自 final_model 輸出（blacklist_analysis + white_to_black），
     所有節點均為已標記詐騙節點，直接使用既有的 risk_score。
     """
-    logger.info("  使用 Wei_model 輸出的 risk_score（所有節點均為詐騙節點）")
+    logger.info("  使用 final_model 輸出的 risk_score（所有節點均為詐騙節點）")
     df = user_info[["user_id", "risk_score"]].drop_duplicates("user_id").copy()
     return df.set_index("user_id")
 
@@ -126,7 +126,7 @@ def build_risk_df(user_info: pd.DataFrame) -> pd.DataFrame:
 
 def main(
     data_dir:   Path  = DEFAULT_DATA_DIR,
-    wei_dir:    Path  = DEFAULT_WEI_DIR,
+    final_dir:    Path  = DEFAULT_FINAL_DIR,
     output_dir: Path  = DEFAULT_OUTPUT,
     max_hops:   int   = 5,
     min_amount: float = 0.0,
@@ -140,7 +140,7 @@ def main(
     print("\n" + "="*55)
     print("[Step 1] 載入資料")
     print("="*55)
-    crypto_df, twd_df, user_info, gnn_edge, gnn_node = load_data(data_dir, wei_dir)
+    crypto_df, twd_df, user_info, gnn_edge, gnn_node = load_data(data_dir, final_dir)
 
     risk_df = build_risk_df(user_info)
 
@@ -149,7 +149,7 @@ def main(
     print("[Step 2] 識別詐騙節點")
     print("="*55)
 
-    # user_info 來自 Wei_model 輸出，全部皆為詐騙節點
+    # user_info 來自 final_model 輸出，全部皆為詐騙節點
     fraud_ids = risk_df.index.tolist()
     print(f"  詐騙節點數：{len(fraud_ids)}  （來源：blacklist_analysis + white_to_black）")
 
@@ -239,9 +239,9 @@ if __name__ == "__main__":
         help="交易資料目錄（含 crypto_transfer_train.csv / twd_transfer_train.csv）",
     )
     parser.add_argument(
-        "--wei_dir", type=str,
-        default=str(DEFAULT_WEI_DIR),
-        help="Wei_model 輸出目錄（含 blacklist_analysis.csv / white_to_black.csv / gnn_*.csv）",
+        "--final_dir", type=str,
+        default=str(DEFAULT_FINAL_DIR),
+        help="final_model 輸出目錄（含 blacklist_analysis.csv / white_to_black.csv / gnn_*.csv）",
     )
     parser.add_argument(
         "--output_dir", type=str,
@@ -268,7 +268,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     main(
         data_dir=Path(args.data_dir),
-        wei_dir=Path(args.wei_dir),
+        final_dir=Path(args.final_dir),
         output_dir=Path(args.output_dir),
         max_hops=args.max_hops,
         min_amount=args.min_amount,

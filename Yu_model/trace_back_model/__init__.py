@@ -1,7 +1,7 @@
 """
 trace_back_model
 ================
-詐騙源頭追溯插件，獨立於 Wei_model 主流程之外。
+詐騙源頭追溯插件，獨立於 final_model 主流程之外。
 
 模組：
     fraud_source_tracer  — Method B：時序反向 BFS 追溯資金鏈
@@ -11,18 +11,18 @@ trace_back_model
     import pandas as pd
     from trace_back_model import FraudSourceTracer, CXGNNAdapter
 
-    # Step 1：載入 user_info（Wei_model 輸出的已標記詐騙節點）
-    bl   = pd.read_csv("Wei_model/output/blacklist_analysis.csv")
-    w2b  = pd.read_csv("Wei_model/output/white_to_black.csv")
+    # Step 1：載入 user_info（final_model 輸出的已標記詐騙節點）
+    bl   = pd.read_csv("final_model/output/blacklist_analysis.csv")
+    w2b  = pd.read_csv("final_model/output/white_to_black.csv")
     user_info = pd.concat([bl, w2b], ignore_index=True).drop_duplicates("user_id")
 
     # Step 2：載入交易資料與 GNN 圖資料
     crypto   = pd.read_csv("adjust_data/train/crypto_transfer_train.csv")
     twd      = pd.read_csv("adjust_data/train/twd_transfer_train.csv")
-    gnn_edge = pd.read_csv("Wei_model/output/gnn_edge_list.csv")
-    gnn_node = pd.read_csv("Wei_model/output/gnn_node_list.csv")
+    gnn_edge = pd.read_csv("final_model/output/gnn_edge_list.csv")
+    gnn_node = pd.read_csv("final_model/output/gnn_node_list.csv")
 
-    # Step 3：建立 risk_df（直接使用 Wei_model 的 risk_score；全部皆為詐騙節點）
+    # Step 3：建立 risk_df（直接使用 final_model 的 risk_score；全部皆為詐騙節點）
     risk_df  = user_info[["user_id", "risk_score"]].drop_duplicates("user_id").set_index("user_id")
     fraud_ids = risk_df.index.tolist()
 

@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="https://timwei0801.github.io/Bio_AWS_Workshop/"><img src="https://img.shields.io/badge/Live_Demo-GitHub_Pages-blue?logo=github" alt="Live Demo"></a>
+  <a href="https://ws97109.github.io/Bio_AWS_Workshop/"><img src="https://img.shields.io/badge/Live_Demo-GitHub_Pages-blue?logo=github" alt="Live Demo"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/Python-3.9+-blue.svg?logo=python" alt="Python"></a>
   <a href="https://xgboost.ai/"><img src="https://img.shields.io/badge/Stacking-XGB%2FLGB%2FCat-orange.svg" alt="Stacking Ensemble"></a>
@@ -38,7 +38,7 @@
 
 加密貨幣交易所面臨嚴重的**人頭戶（黑名單用戶）**問題——這些帳戶被用於洗錢、詐騙資金流轉等非法活動。
 
-本專案針對 **77 萬筆交易紀錄**建構端到端風險偵測系統。經過完整實驗流程（詳見 [`Wei_model/docs/`](Wei_model/docs/)），最終架構由 **LOO（Leave-One-Out）毒性特徵**主導——這是移植自[第一名 BitoGuard 團隊](https://github.com/gttthuang/Bito)的圖訊號→表格特徵轉換方法，將 F1 從 0.37 直接推到 0.83。
+本專案針對 **77 萬筆交易紀錄**建構端到端風險偵測系統。經過完整實驗流程（詳見 [`final_model/docs/`](final_model/docs/)），最終架構由 **LOO（Leave-One-Out）毒性特徵**主導——這是移植自[第一名 BitoGuard 團隊](https://github.com/gttthuang/Bito)的圖訊號→表格特徵轉換方法，將 F1 從 0.37 直接推到 0.83。
 
 - **LOO 毒性特徵（14 維）**：對每位使用者，計算其共用錢包 / 共用 IP / 直接轉帳對象上的黑名單密度，以留一法扣除自身標籤防止目標洩漏
 - **三模型 Stacking 集成**：XGBoost + LightGBM (Focal Loss α=0.75, γ=2.0) + CatBoost，Logistic Regression meta-learner
@@ -139,7 +139,7 @@ LOO 毒性特徵突破後的測試集指標（10,204 筆資料、328 正例，5-
 | **Precision** | 0.3552 | **0.9280** | +161% |
 | **Recall** | 0.3963 | **0.7470** | +88% |
 
-完整實驗紀錄：[`Wei_model/docs/LOO_TOXICITY_REPORT.md`](Wei_model/docs/LOO_TOXICITY_REPORT.md)
+完整實驗紀錄：[`final_model/docs/LOO_TOXICITY_REPORT.md`](final_model/docs/LOO_TOXICITY_REPORT.md)
 
 </details>
 
@@ -286,7 +286,7 @@ S = 50    （低樣本錢包的平滑常數）
 - `is_high_risk_career` 與 `is_high_risk_income` 保留（AML 法規依據）
 - DIR 失敗偏資訊性而非可操作的 bug——模型本身運作正確（極度選擇性），但在小子群上選擇率自然拉開
 
-完整審計資料：[`Wei_model/output/baseline_loo/fairness_summary.json`](Wei_model/output/baseline_loo/fairness_summary.json)
+完整審計資料：[`final_model/output/baseline_loo/fairness_summary.json`](final_model/output/baseline_loo/fairness_summary.json)
 
 </details>
 
@@ -354,7 +354,7 @@ S = 50    （低樣本錢包的平滑常數）
 pip install xgboost catboost lightgbm scikit-learn shap torch torch_geometric imbalanced-learn pyod
 
 # 執行完整 Pipeline（12 步驟全自動）
-cd Wei_model/model
+cd final_model/model
 python main.py --data_dir ../../adjust_data/train --output ../output
 
 # 跳過 GNN — 推薦（消融實驗顯示加 GNN 反而讓 F1 略降）
@@ -391,7 +391,7 @@ npm run build      # 生產環境建置
 
 ```
 Bio_AWS_Workshop/
-├── Wei_model/                          # 核心 ML Pipeline
+├── final_model/                          # 核心 ML Pipeline
 │   ├── model/
 │   │   ├── main.py                    # 主訓練流程入口（12 步驟）
 │   │   ├── Feature_engineering.py     # 特徵工程（11 大類 95 維，含 LOO）
@@ -436,7 +436,7 @@ Bio_AWS_Workshop/
 
 LOO 毒性特徵族群（第 2 節 / Step 2）是忠實移植自同場競賽**第一名 BitoGuard 團隊**的 repo（[gttthuang](https://github.com/gttthuang/Bito)）。他們的洞見——**共用錢包 / IP 黑名單密度編碼為表格特徵在這個資料量級勝過 GNN**——是本專案把 F1 從 0.37 推到 0.83 的唯一最大貢獻者。特此致謝。
 
-我們在自己的 pipeline 上獨立驗證了該方法的可重現性，完整前後對照紀錄於 [`Wei_model/docs/LOO_TOXICITY_REPORT.md`](Wei_model/docs/LOO_TOXICITY_REPORT.md)。
+我們在自己的 pipeline 上獨立驗證了該方法的可重現性，完整前後對照紀錄於 [`final_model/docs/LOO_TOXICITY_REPORT.md`](final_model/docs/LOO_TOXICITY_REPORT.md)。
 
 ---
 
@@ -447,11 +447,11 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) for deta
 ---
 
 <p align="center">
-  <a href="https://github.com/timwei0801/Bio_AWS_Workshop">
-    <img src="https://img.shields.io/github/stars/timwei0801/Bio_AWS_Workshop.svg?style=social" alt="GitHub Stars">
+  <a href="https://github.com/ws97109/Bio_AWS_Workshop">
+    <img src="https://img.shields.io/github/stars/ws97109/Bio_AWS_Workshop.svg?style=social" alt="GitHub Stars">
   </a>
-  <a href="https://github.com/timwei0801/Bio_AWS_Workshop/fork">
-    <img src="https://img.shields.io/github/forks/timwei0801/Bio_AWS_Workshop.svg?style=social" alt="GitHub Forks">
+  <a href="https://github.com/ws97109/Bio_AWS_Workshop/fork">
+    <img src="https://img.shields.io/github/forks/ws97109/Bio_AWS_Workshop.svg?style=social" alt="GitHub Forks">
   </a>
 </p>
 

@@ -5,7 +5,7 @@
 ## 跑法
 
 ```bash
-cd Wei_model/model
+cd final_model/model
 
 # 1) Baseline（產生 ensemble_model.joblib）
 python main.py --output ../output/baseline            # 完整版含 GNN

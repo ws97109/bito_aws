@@ -1,4 +1,4 @@
-"""Build all frontend-required CSVs from a Wei_model pipeline output.
+"""Build all frontend-required CSVs from a final_model pipeline output.
 
 The main pipeline produces:
   shap_values_all.csv    (63,770 × 79 — one row per user, all SHAP values)

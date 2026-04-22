@@ -2,7 +2,7 @@ import pandas as pd
 import os
 import glob
 
-# 計算專案根目錄（Wei_model/ → 專案根目錄）
+# 計算專案根目錄（final_model/ → 專案根目錄）
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # 建立輸出目錄（在專案根目錄下）

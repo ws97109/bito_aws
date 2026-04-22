@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="https://timwei0801.github.io/Bio_AWS_Workshop/"><img src="https://img.shields.io/badge/Live_Demo-GitHub_Pages-blue?logo=github" alt="Live Demo"></a>
+  <a href="https://ws97109.github.io/Bio_AWS_Workshop/"><img src="https://img.shields.io/badge/Live_Demo-GitHub_Pages-blue?logo=github" alt="Live Demo"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/Python-3.9+-blue.svg?logo=python" alt="Python"></a>
   <a href="https://xgboost.ai/"><img src="https://img.shields.io/badge/Stacking-XGB%2FLGB%2FCat-orange.svg" alt="Stacking Ensemble"></a>
@@ -38,7 +38,7 @@
 
 Cryptocurrency exchanges face a critical **mule account (blacklisted user)** problem — these accounts are exploited for money laundering, fraud fund transfers, and other illicit activities.
 
-This project analyzes **770,000+ transaction records** to build an end-to-end risk detection system. After an extensive experimentation phase (documented in [`Wei_model/docs/`](Wei_model/docs/)), the final architecture is driven by **LOO (Leave-One-Out) Toxicity features** — a graph-signal-to-tabular-feature transformation ported from the [1st-place BitoGuard repo](https://github.com/gttthuang/Bito) that lifted F1 from 0.37 to 0.83.
+This project analyzes **770,000+ transaction records** to build an end-to-end risk detection system. After an extensive experimentation phase (documented in [`final_model/docs/`](final_model/docs/)), the final architecture is driven by **LOO (Leave-One-Out) Toxicity features** — a graph-signal-to-tabular-feature transformation ported from the [1st-place BitoGuard repo](https://github.com/gttthuang/Bito) that lifted F1 from 0.37 to 0.83.
 
 - **LOO Toxicity Features (14 dims)**: For each user, compute blacklist density across their shared-wallet / shared-IP / direct-transfer neighbours — with leave-one-out self-label removal to prevent target leakage
 - **3-Model Stacking Ensemble**: XGBoost + LightGBM (Focal Loss α=0.75, γ=2.0) + CatBoost with a Logistic Regression meta-learner
@@ -139,7 +139,7 @@ Test-set metrics after the LOO-Toxicity breakthrough (10,204 rows, 328 positives
 | **Precision** | 0.3552 | **0.9280** | +161% |
 | **Recall** | 0.3963 | **0.7470** | +88% |
 
-Full experiment log: [`Wei_model/docs/LOO_TOXICITY_REPORT.md`](Wei_model/docs/LOO_TOXICITY_REPORT.md)
+Full experiment log: [`final_model/docs/LOO_TOXICITY_REPORT.md`](final_model/docs/LOO_TOXICITY_REPORT.md)
 
 </details>
 
@@ -286,7 +286,7 @@ With the new model's very high Precision (0.928), absolute FPR drops to <0.5% ac
 - `is_high_risk_career` and `is_high_risk_income` are retained — regulatory basis from AML frameworks
 - The DIR failures are informational rather than actionable — the model is working *correctly* by being highly selective, but selection rates naturally diverge on small subgroups
 
-Full audit data: [`Wei_model/output/baseline_loo/fairness_summary.json`](Wei_model/output/baseline_loo/fairness_summary.json)
+Full audit data: [`final_model/output/baseline_loo/fairness_summary.json`](final_model/output/baseline_loo/fairness_summary.json)
 
 </details>
 
@@ -329,7 +329,7 @@ Built with React + TypeScript + Vite, supporting three viewing modes:
 pip install xgboost catboost lightgbm scikit-learn shap torch torch_geometric imbalanced-learn pyod
 
 # Run full pipeline (12 automated steps)
-cd Wei_model/model
+cd final_model/model
 python main.py --data_dir ../../adjust_data/train --output ../output
 
 # Skip GNN — recommended (ablation showed GNN slightly hurts F1 vs LOO-only)
@@ -389,7 +389,7 @@ gh run watch           # optional — follow the deploy
 
 ```
 Bio_AWS_Workshop/
-├── Wei_model/                          # Core ML Pipeline
+├── final_model/                          # Core ML Pipeline
 │   ├── model/
 │   │   ├── main.py                    # Main training entry (12 steps)
 │   │   ├── Feature_engineering.py     # Feature engineering (11 cats, 95 dims incl. LOO)
@@ -434,7 +434,7 @@ Bio_AWS_Workshop/
 
 The LOO Toxicity feature family (Section 2 / Step 2) is a faithful port from the **1st-place BitoGuard repo** by [gttthuang](https://github.com/gttthuang/Bito) from the same competition. Their insight — that shared-wallet / shared-IP blacklist density encoded as tabular features outperforms a GNN on this scale of data — was the single biggest contributor to lifting our F1 from 0.37 to 0.83. Credit where credit is due.
 
-We verified the method reproduces independently on our pipeline and documented the full before/after in [`Wei_model/docs/LOO_TOXICITY_REPORT.md`](Wei_model/docs/LOO_TOXICITY_REPORT.md).
+We verified the method reproduces independently on our pipeline and documented the full before/after in [`final_model/docs/LOO_TOXICITY_REPORT.md`](final_model/docs/LOO_TOXICITY_REPORT.md).
 
 ---
 
@@ -445,11 +445,11 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) for deta
 ---
 
 <p align="center">
-  <a href="https://github.com/timwei0801/Bio_AWS_Workshop">
-    <img src="https://img.shields.io/github/stars/timwei0801/Bio_AWS_Workshop.svg?style=social" alt="GitHub Stars">
+  <a href="https://github.com/ws97109/Bio_AWS_Workshop">
+    <img src="https://img.shields.io/github/stars/ws97109/Bio_AWS_Workshop.svg?style=social" alt="GitHub Stars">
   </a>
-  <a href="https://github.com/timwei0801/Bio_AWS_Workshop/fork">
-    <img src="https://img.shields.io/github/forks/timwei0801/Bio_AWS_Workshop.svg?style=social" alt="GitHub Forks">
+  <a href="https://github.com/ws97109/Bio_AWS_Workshop/fork">
+    <img src="https://img.shields.io/github/forks/ws97109/Bio_AWS_Workshop.svg?style=social" alt="GitHub Forks">
   </a>
 </p>
 
