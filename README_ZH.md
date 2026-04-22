@@ -436,7 +436,6 @@ Bio_AWS_Workshop/
 
 LOO 毒性特徵族群（第 2 節 / Step 2）是忠實移植自同場競賽**第一名 BitoGuard 團隊**的 repo（[gttthuang](https://github.com/gttthuang/Bito)）。他們的洞見——**共用錢包 / IP 黑名單密度編碼為表格特徵在這個資料量級勝過 GNN**——是本專案把 F1 從 0.37 推到 0.83 的唯一最大貢獻者。特此致謝。
 
-我們在自己的 pipeline 上獨立驗證了該方法的可重現性，完整前後對照紀錄於 [`final_model/docs/LOO_TOXICITY_REPORT.md`](final_model/docs/LOO_TOXICITY_REPORT.md)。
 
 ---
 
